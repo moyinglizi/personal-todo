@@ -180,6 +180,20 @@ export function renderSettingsModal(
               🔄 ${t('resetAllDaily')}
             </button>
           </div>
+
+          <details class="flow-help-section" style="margin-top: 20px;">
+            <summary class="flow-help-title">📖 ${t('flowHelp')}</summary>
+            <div class="flow-help-content">
+              <p>${t('flowHelpIntro')}</p>
+              <ul>
+                <li><strong>${t('dependencies')}:</strong> ${t('flowHelpDep')}</li>
+                <li><strong>${t('subtasks')}:</strong> ${t('flowHelpSubtask')}</li>
+                <li><strong>${t('dependencies')}:</strong> ${t('flowHelpEdge')}</li>
+                <li><strong>${t('flowView')}:</strong> ${t('flowHelpView')}</li>
+                <li><strong>${t('blockedBy')}:</strong> ${t('flowHelpRules')}</li>
+              </ul>
+            </div>
+          </details>
         </div>
         <div class="modal-footer">
           <button class="btn-secondary" onclick="window.todoApp.closeSettings()">${t('cancel')}</button>

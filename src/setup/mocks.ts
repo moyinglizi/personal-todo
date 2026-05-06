@@ -1,5 +1,5 @@
 import { mockIPC, clearMocks } from "@tauri-apps/api/mocks";
-import type { Todo, Category, Settings } from "../types";
+import type { Todo, Category, Settings, Dependency } from "../types";
 
 export const createMockTodo = (overrides: Partial<Todo> = {}): Todo => ({
   id: "todo-1",
@@ -20,6 +20,7 @@ export const createMockTodo = (overrides: Partial<Todo> = {}): Todo => ({
   is_daily: false,
   last_daily_reset: null,
   daily_time: null,
+  parent_id: null,
   ...overrides,
 });
 
@@ -41,6 +42,14 @@ export const createMockSettings = (overrides: Partial<Settings> = {}): Settings 
   auto_start: false,
   category_count_mode: "uncompleted",
   shortcuts: { openQuickAdd: 'n', focusSearch: '/', navigateDown: 'j', navigateUp: 'k', save: 'Enter', close: 'Escape' },
+  ...overrides,
+});
+
+export const createMockDependency = (overrides: Partial<Dependency> = {}): Dependency => ({
+  id: "dep-1",
+  predecessor_id: "todo-1",
+  successor_id: "todo-2",
+  created_at: "2026-05-06T10:00:00Z",
   ...overrides,
 });
 
@@ -88,6 +97,14 @@ export function setupStorageMocks(options: StorageMocksOptions = {}) {
       case "reset_daily_todos":
         return;
       case "launch_url":
+        return;
+      case "get_dependencies":
+        return [];
+      case "add_dependency":
+        return createMockDependency({ id: "new-dep-id" });
+      case "remove_dependency":
+        return;
+      case "set_parent":
         return;
       default:
         console.warn(`Unhandled mockIPC command: ${cmd}`);

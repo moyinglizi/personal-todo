@@ -15,6 +15,13 @@ describe('storage service (invoke wrappers)', () => {
         return createMockCategory({ id: "new-cat-id", name: p.name || "New Category", color: p.color || "#3B82F6", icon: p.icon || "📁" });
       }
       if (cmd === "get_auto_start") return false;
+      if (cmd === "get_dependencies") return [];
+      if (cmd === "add_dependency") {
+        const p = payload as any;
+        return { id: "new-dep-id", predecessor_id: p.predecessorId || "todo-1", successor_id: p.successorId || "todo-2", created_at: "2026-05-06T10:00:00Z" };
+      }
+      if (cmd === "remove_dependency") return;
+      if (cmd === "set_parent") return;
       return null;
     });
   });
@@ -196,6 +203,38 @@ describe('storage service (invoke wrappers)', () => {
     it('should return empty array string for empty input', () => {
       const json = storage.stringifyReminders([]);
       expect(json).toBe('[]');
+    });
+  });
+
+  describe('getDependencies', () => {
+    it('should return array of dependencies', async () => {
+      const deps = await storage.getDependencies();
+      expect(Array.isArray(deps)).toBe(true);
+    });
+  });
+
+  describe('addDependency', () => {
+    it('should create dependency with correct fields', async () => {
+      const dep = await storage.addDependency("todo-1", "todo-2");
+      expect(dep).toHaveProperty('id');
+      expect(dep.predecessor_id).toBe("todo-1");
+      expect(dep.successor_id).toBe("todo-2");
+    });
+  });
+
+  describe('removeDependency', () => {
+    it('should remove dependency without error', async () => {
+      await expect(storage.removeDependency("dep-1")).resolves.not.toThrow();
+    });
+  });
+
+  describe('setParent', () => {
+    it('should set parent without error', async () => {
+      await expect(storage.setParent("todo-1", "todo-2")).resolves.not.toThrow();
+    });
+
+    it('should clear parent without error', async () => {
+      await expect(storage.setParent("todo-1", null)).resolves.not.toThrow();
     });
   });
 });

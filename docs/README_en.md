@@ -22,13 +22,15 @@ personal-todo/
 │   ├── types.ts                  # TypeScript type definitions
 │   ├── components/               # UI components
 │   │   ├── TodoItem.ts           # Todo item component
-│   │   ├── TodoForm.ts           # Todo form
+│   │   ├── TodoForm.ts           # Todo form (with dependency editor)
 │   │   ├── QuickInput.ts         # Quick add modal
 │   │   ├── CategoryPanel.ts      # Category sidebar
-│   │   ├── CategoryManager.ts    # Category manager modal
+│   │   ├── CategoryManager.ts    # Category manager + settings modal
 │   │   ├── ContextMenu.ts        # Context menu
 │   │   ├── SearchBar.ts          # Search bar
-│   │   └── FilterBar.ts          # Filter bar
+│   │   ├── FilterBar.ts          # Filter bar
+│   │   ├── FlowCanvas.ts         # Flow chart layout + SVG rendering
+│   │   └── ConfirmModal.ts       # Confirmation dialog
 │   ├── services/                 # Services
 │   │   ├── storage.ts            # Data persistence (Tauri invoke)
 │   │   ├── parser.ts             # Date parsing service
@@ -132,7 +134,66 @@ interface Category {
   - `Enter` - Save/Confirm
   - `Escape` - Close modal
 
+### 9. Flow / Pipeline
+- **Predecessor/Successor**: Drag connection handles in the flow canvas to create dependency edges (A must complete before B starts)
+- **Subtasks**: Decompose a task into child items via the bottom handle drag
+- **Flow View**: Toggle between list view and flow canvas view (button in filter bar)
+  - **All Todos** (`filterCategory === null`): Read-only canvas showing all relationships
+  - **Specific Category**: Editable canvas — drag nodes, edges, and handles to edit flow
+- **Dependency Edge Operations**: Double-click to delete, drag away to delete, drag to another node to reassign
+- **Edge Visual**: Bezier curves with arrow markers, 28px transparent hit area for easy interaction
+- **Blocking Logic**: Cannot start a task until all predecessors complete; cannot complete a task until all subtasks complete
+- **Auto-promotion**: Assigning a dependency to a subtask clears its parent first
+- **Clear All Dependencies**: Button in flow view header with confirmation dialog
+- **Zoom/Pan**: Mouse wheel zoom, drag empty space to pan, ↺ reset button
+
 ## Database Schema
+
+```sql
+CREATE TABLE todos (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  due_date TEXT,
+  due_date_display TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  notes TEXT DEFAULT '',
+  quick_launch TEXT DEFAULT '[]',
+  reminders TEXT DEFAULT '[]',
+  tags TEXT DEFAULT '[]',
+  recurring TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  category_id TEXT REFERENCES categories(id),
+  priority TEXT DEFAULT 'medium',
+  is_daily INTEGER DEFAULT 0,
+  last_daily_reset TEXT,
+  daily_time TEXT,
+  parent_id TEXT              -- FK to todos.id for subtask hierarchy
+);
+
+CREATE TABLE categories (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#808080',
+  icon TEXT DEFAULT '',
+  is_system INTEGER NOT NULL DEFAULT 0,
+  "order" INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE todo_dependencies (
+  id TEXT PRIMARY KEY,
+  predecessor_id TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  successor_id TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL
+);
+```
 
 ```sql
 CREATE TABLE todos (

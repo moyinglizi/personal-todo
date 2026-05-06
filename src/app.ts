@@ -1,5 +1,5 @@
 import type { Todo, Category, Settings, Shortcuts, FilterStatus, SortBy, AppState } from './types';
-import { getTodos, createTodo, updateTodo, deleteTodo, getCategories, getSettings, updateSettings, resetDailyTodos as apiResetDaily, createCategory, updateCategory, deleteCategory, reorderCategories, openPath, stringifyReminders, setAutoStart } from './services/storage';
+import { getTodos, createTodo, updateTodo, deleteTodo, getCategories, getSettings, updateSettings, resetDailyTodos as apiResetDaily, createCategory, updateCategory, deleteCategory, reorderCategories, openPath, stringifyReminders, setAutoStart, getDependencies, addDependency, removeDependency, setParent } from './services/storage';
 import { parseFlexibleDate } from './services/parser';
 import { reminderScheduler } from './services/reminder';
 import { checkDailyReset } from './services/dailyReset';
@@ -12,6 +12,7 @@ import { renderFilterBar } from './components/FilterBar';
 import { renderContextMenu, renderCategoryContextMenu } from './components/ContextMenu';
 import { renderCategoryManager, renderSettingsModal } from './components/CategoryManager';
 import { renderConfirmModal } from './components/ConfirmModal';
+import { renderFlowCanvas, NODE_W, NODE_H, bezierD } from './components/FlowCanvas';
 import { t, setLanguage, getTranslations, type Language } from './services/i18n';
 
 class TodoApp {
@@ -42,6 +43,8 @@ class TodoApp {
     draggingTodoId: null,
     draggingCategoryId: null,
     todoListScrollTop: 0,
+    dependencies: [],
+    flowViewOpen: false,
   };
 
   private selectedColor: string = '#3B82F6';
@@ -68,6 +71,9 @@ class TodoApp {
       this.state.todos = await getTodos();
       this.state.todos = checkDailyReset(this.state.todos);
       this.state.categories = await getCategories();
+      this.state.dependencies = await getDependencies();
+      this.flowNodePositions.clear();
+      this.applyCompletedSort();
       const settings = await getSettings();
       // shortcuts is already parsed by storage.getSettings
       this.state.settings.shortcuts = settings.shortcuts;
@@ -252,15 +258,9 @@ class TodoApp {
       );
     }
 
-    // Sort - completed always last when showing all
+    // Sort (completed-to-bottom is applied separately on navigation actions)
     const priorityOrder: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
     filtered.sort((a, b) => {
-      // Always sort completed to the bottom
-      if (this.state.filterStatus === 'all') {
-        if (a.status === 'completed' && b.status !== 'completed') return 1;
-        if (a.status !== 'completed' && b.status === 'completed') return -1;
-      }
-
       let cmp = 0;
       switch (this.state.sortBy) {
         case 'due_date':
@@ -314,26 +314,27 @@ class TodoApp {
               + ${t('quickAdd')}
             </button>
           </div>
-          ${renderFilterBar(
-            this.state.filterStatus,
-            this.state.sortBy,
-            (s) => this.setFilter(s),
-            (s) => this.setSort(s)
-          )}
+          <div class="filter-row">
+            <div class="view-toggle">
+              <button class="view-btn ${!this.state.flowViewOpen ? 'active' : ''}"
+                      onclick="window.todoApp.setViewMode(false)">${t('listView')}</button>
+              <button class="view-btn ${this.state.flowViewOpen ? 'active' : ''}"
+                      onclick="window.todoApp.setViewMode(true)">${t('flowView')}</button>
+            </div>
+            ${renderFilterBar(
+              this.state.filterStatus,
+              this.state.sortBy,
+              (s) => this.setFilter(s),
+              (s) => this.setSort(s)
+            )}
+          </div>
           <div class="todo-list">
             ${filteredTodos.length === 0 ? `
               <div class="empty-state">
                 <p>${t('noTodosYet')}</p>
                 <button class="btn-primary" onclick="window.todoApp.openQuickAdd()">${t('addFirstTodo')}</button>
               </div>
-            ` : filteredTodos.map(todo => renderTodoItem(
-              todo,
-              todo.id === this.state.selectedTodoId,
-              () => this.selectTodo(todo.id),
-              () => this.editTodo(todo.id),
-              () => this.toggleStatus(todo.id),
-              () => this.confirmDelete(todo.id)
-            )).join('')}
+            ` : this.renderTodoList(filteredTodos)}
           </div>
           <div class="trash-zone ${this.state.draggingTodoId ? 'active' : ''}">
             <span class="trash-icon">🗑️</span>
@@ -365,7 +366,9 @@ class TodoApp {
         this.state.categories,
         () => this.saveTodo(),
         () => this.closeModal(),
-        () => this.deleteTodo()
+        () => this.deleteTodo(),
+        this.state.todos,
+        this.state.dependencies
       ) : ''}
       ${this.state.isSettingsOpen ? renderSettingsModal(
         this.state.settings.hotkey,
@@ -377,8 +380,8 @@ class TodoApp {
         () => this.saveSettings()
       ) : ''}
       ${this.state.isConfirmOpen ? renderConfirmModal(
-        this.state.confirmType === 'todo' ? t('confirmDelete') : t('confirmDeleteCategory'),
-        this.state.confirmType === 'todo' ? t('confirmDelete') : t('categoryDeleteWarning')
+        this.state.confirmType === 'clearDeps' ? t('confirmClearDeps') : this.state.confirmType === 'todo' ? t('confirmDelete') : t('confirmDeleteCategory'),
+        this.state.confirmType === 'clearDeps' ? t('confirmClearDepsDesc') : this.state.confirmType === 'todo' ? t('confirmDelete') : t('categoryDeleteWarning')
       ) : ''}
     `;
 
@@ -392,9 +395,116 @@ class TodoApp {
     // Restore scroll position after innerHTML replacement
     const tl = document.querySelector('.todo-list') as HTMLElement;
     if (tl && savedScroll > 0) {
-      tl.scrollTop = 0;  // Reset first to override browser default
-      tl.scrollTop = savedScroll;  // Then restore
+      tl.scrollTop = 0;
+      tl.scrollTop = savedScroll;
     }
+
+    // Restore flow canvas zoom/pan state
+    for (const [index] of this.flowCanvasZoom) {
+      requestAnimationFrame(() => this.applyFlowCanvasTransform(index));
+    }
+    // Auto-fit first render (no saved zoom)
+    if (this.state.flowViewOpen && !this.flowCanvasZoom.has(0)) {
+      requestAnimationFrame(() => this.autoFitFlowCanvas(0));
+    }
+  }
+
+  private autoFitFlowCanvas(index: number) {
+    const container = document.querySelector(`#flow-scene-${index}`)?.parentElement;
+    const scene = document.getElementById(`flow-scene-${index}`);
+    const svg = scene?.querySelector('.flow-svg') as SVGElement;
+    if (!container || !svg) return;
+    const cw = container.clientWidth - 20;
+    const ch = container.clientHeight - 20;
+    const sw = parseFloat(svg.getAttribute('width') || '0');
+    const sh = parseFloat(svg.getAttribute('height') || '0');
+    if (sw <= 0 || sh <= 0) return;
+    const scale = Math.min(cw / sw, ch / sh, 1.5);
+    this.flowCanvasZoom.set(index, scale);
+    this.flowCanvasPanX.set(index, 0);
+    this.flowCanvasPanY.set(index, 0);
+    this.applyFlowCanvasTransform(index);
+  }
+
+  private renderTodoList(filteredTodos: Todo[]): string {
+    try {
+      if (this.state.flowViewOpen) {
+        return this.renderFlowView(filteredTodos);
+      }
+      // List view
+      return filteredTodos.map(todo => this.renderTodoWithInfo(todo, 0)).join('');
+    } catch (err) {
+      console.error('renderTodoList error:', err);
+      return filteredTodos.map(todo => this.renderTodoWithInfo(todo, 0)).join('');
+    }
+  }
+
+  private renderTodoWithInfo(todo: Todo, depth: number, showDragLabels = false): string {
+    const predecessors = this.getPredecessors(todo.id);
+    const subtodos = this.getSubtodos(todo.id);
+    const isBlocked = this.hasIncompletePredecessors(todo.id);
+    return renderTodoItem(
+      todo,
+      todo.id === this.state.selectedTodoId,
+      () => this.selectTodo(todo.id),
+      () => this.editTodo(todo.id),
+      () => this.toggleStatus(todo.id),
+      () => this.confirmDelete(todo.id),
+      { predecessorCount: predecessors.length, subtaskCount: subtodos.length, isBlocked, depth },
+      showDragLabels
+    );
+  }
+
+  private renderFlowView(filteredTodos: Todo[]): string {
+    // Read-only for "全部" (all todos), editable for specific categories
+    const readOnly = this.state.filterCategory === null;
+    const hasItems = filteredTodos.length > 0;
+    const canvasIndex = 0;
+
+    const canvasHtml = hasItems
+      ? `
+        <div class="flow-canvas-container"
+             onwheel="window.todoApp.flowCanvasWheel(${canvasIndex}, event)"
+             onmousedown="window.todoApp.flowCanvasPanStart(${canvasIndex}, event)">
+          <div class="flow-canvas-scene" id="flow-scene-${canvasIndex}">
+            ${renderFlowCanvas(filteredTodos, this.state.dependencies, canvasIndex, this.flowNodePositions, readOnly)}
+          </div>
+        </div>
+      ` : `
+        <div class="flow-empty-state">
+          <div class="flow-empty-icon">🔗</div>
+          <p class="flow-empty-title">${t('noFlowsYet')}</p>
+          <p class="flow-empty-hint">${t('flowHint')}</p>
+        </div>
+      `;
+
+    return `
+      <div class="flow-group">
+        <div class="flow-group-header">
+          <span class="flow-group-icon">🔗</span>
+          <span class="flow-group-name">${t('flowView')}</span>
+          <span class="flow-group-count">${filteredTodos.length}</span>
+          ${readOnly ? `<span class="flow-readonly-badge" title="${t('flowReadonly')}">🔒 ${t('flowReadonly')}</span>` : ''}
+          ${!readOnly ? `<button class="btn-small btn-danger-clear" onclick="window.todoApp.clearAllDependencies()" title="${t('clearAllDeps')}">🗑 ${t('clearAllDeps')}</button>` : ''}
+          <div class="flow-chart-controls">
+            <button class="flow-zoom-btn" onclick="window.todoApp.flowCanvasZoomBtn(${canvasIndex}, -0.2)">−</button>
+            <button class="flow-zoom-btn" onclick="window.todoApp.flowCanvasZoomBtn(${canvasIndex}, 0.2)">+</button>
+            <button class="flow-zoom-btn" onclick="window.todoApp.flowCanvasReset(${canvasIndex})">↺</button>
+          </div>
+        </div>
+        ${canvasHtml}
+        ${hasItems ? `
+        <div class="flow-todo-list-header">${t('todoItems')}</div>
+        <div class="flow-todo-list">
+          ${filteredTodos.map(todo => {
+            const depth = this.computeDepth(todo.id);
+            return `<div class="flow-item-row" style="--flow-depth:${depth};">
+                      ${this.renderTodoWithInfo(todo, depth, true)}
+                    </div>`;
+          }).join('')}
+        </div>` : ''}
+      </div>
+    `;
   }
 
   // Actions
@@ -408,9 +518,23 @@ class TodoApp {
     this.render();
   }
 
+  private applyCompletedSort() {
+    if (this.state.filterStatus !== 'all') return;
+    const active: Todo[] = [];
+    const completed: Todo[] = [];
+    for (const t of this.state.todos) {
+      if (t.status === 'completed') completed.push(t);
+      else active.push(t);
+    }
+    let pos = 0;
+    for (const t of active) t.position = pos++;
+    for (const t of completed) t.position = pos++;
+  }
+
   selectCategory(id: string | null) {
     this.state.filterCategory = id;
     this.state.selectedTodoId = null;
+    this.applyCompletedSort();
     this.render();
   }
 
@@ -426,11 +550,13 @@ class TodoApp {
 
   setFilter(status: FilterStatus) {
     this.state.filterStatus = status;
+    this.applyCompletedSort();
     this.render();
   }
 
   setSort(sort: SortBy) {
     this.state.sortBy = sort;
+    this.applyCompletedSort();
     this.render();
   }
 
@@ -686,6 +812,8 @@ class TodoApp {
   }
 
   editTodo(id: string) {
+    // Prevent dblclick from opening edit right after a rapid status toggle
+    if (Date.now() - this.lastStatusToggle < 500) return;
     this.closeContextMenu();
     const todo = this.state.todos.find(t => t.id === id);
     if (todo) {
@@ -798,6 +926,11 @@ class TodoApp {
   }
 
   async executeConfirm() {
+    if (this.state.confirmType === 'clearDeps') {
+      await this.executeClearDependencies();
+      this.closeConfirmModal();
+      return;
+    }
     if (!this.state.confirmType || !this.state.confirmTargetId) {
       this.closeConfirmModal();
       return;
@@ -829,18 +962,27 @@ class TodoApp {
       } catch (error) {
         console.error('Failed to delete category:', error);
       }
+    } else if (this.state.confirmType === 'clearDeps') {
+      await this.executeClearDependencies();
     }
 
     this.closeConfirmModal();
   }
 
   async toggleStatus(id: string) {
+    this.lastStatusToggle = Date.now();
     const todo = this.state.todos.find(t => t.id === id);
     if (!todo) return;
 
     const statusOrder: Todo['status'][] = ['pending', 'in_progress', 'completed', 'blocked'];
     const currentIndex = statusOrder.indexOf(todo.status);
     const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
+
+    const { allowed, reason } = this.canSetStatus(id, nextStatus);
+    if (!allowed) {
+      this.showToast(reason);
+      return;
+    }
 
     try {
       await updateTodo(
@@ -854,7 +996,8 @@ class TodoApp {
         todo.reminders,
         todo.category_id,
         todo.priority,
-        todo.is_daily
+        todo.is_daily,
+        todo.parent_id
       );
 
       todo.status = nextStatus;
@@ -868,6 +1011,12 @@ class TodoApp {
     const todo = this.state.todos.find(t => t.id === id);
     if (!todo) return;
 
+    const { allowed, reason } = this.canSetStatus(id, status);
+    if (!allowed) {
+      this.showToast(reason);
+      return;
+    }
+
     try {
       await updateTodo(
         todo.id,
@@ -880,7 +1029,8 @@ class TodoApp {
         todo.reminders,
         todo.category_id,
         todo.priority,
-        todo.is_daily
+        todo.is_daily,
+        todo.parent_id
       );
 
       todo.status = status as Todo['status'];
@@ -1300,15 +1450,27 @@ class TodoApp {
       }
     });
 
-    // Check todo items
+    // Check todo items (with split-zone for drag-to-flow)
     document.querySelectorAll('.todo-item').forEach(item => {
       const rect = (item as HTMLElement).getBoundingClientRect();
       if (event.clientX >= rect.left && event.clientX <= rect.right &&
           event.clientY >= rect.top && event.clientY <= rect.bottom &&
           item.getAttribute('data-id') !== this.state.draggingTodoId) {
+        const relativeY = (event.clientY - rect.top) / rect.height;
+
         item.classList.add('drag-over');
+        if (relativeY < 0.4) {
+          item.classList.add('drag-over-top');
+          item.classList.remove('drag-over-bottom');
+        } else if (relativeY > 0.6) {
+          item.classList.add('drag-over-bottom');
+          item.classList.remove('drag-over-top');
+        } else {
+          item.classList.remove('drag-over-top');
+          item.classList.remove('drag-over-bottom');
+        }
       } else {
-        item.classList.remove('drag-over');
+        item.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
       }
     });
 
@@ -1474,7 +1636,47 @@ class TodoApp {
       return;
     }
 
-    // Check todo reordering
+    // Check drop on flow canvas node (from list to chart)
+    const canvasNode = target.closest('.flow-node') as HTMLElement;
+    if (canvasNode && !target.closest('.flow-item-row')) {
+      const targetId = canvasNode.dataset.todoId;
+      if (targetId && targetId !== todoId) {
+        const rect = canvasNode.getBoundingClientRect();
+        const rx = (event.clientX - rect.left) / rect.width;
+        const ry = (event.clientY - rect.top) / rect.height;
+        const draggedTodo = this.state.todos.find(t => t.id === todoId);
+        const targetTodo = this.state.todos.find(t => t.id === targetId);
+
+        try {
+          if (ry > 0.6) {
+            // Bottom zone: make subtask
+            const hasDeps = this.state.dependencies.some(d => d.predecessor_id === todoId || d.successor_id === todoId);
+            if (hasDeps) { this.showToast(t('hasDepsNoSubtask')); this.clearDragState(); return; }
+            if (targetTodo?.parent_id) { this.showToast(t('noSubtaskOfSubtask')); this.clearDragState(); return; }
+            const sourceHasChildren = this.state.todos.some(t => t.parent_id === todoId);
+            if (sourceHasChildren) { this.showToast(t('hasChildrenNoSubtask')); this.clearDragState(); return; }
+            await setParent(todoId, targetId);
+            if (draggedTodo) draggedTodo.parent_id = targetId;
+          } else if (rx < 0.4) {
+            // Left zone: dragged is predecessor of target (dragged → target)
+            if (draggedTodo?.parent_id) { await setParent(todoId, null); if (draggedTodo) draggedTodo.parent_id = null; }
+            if (targetTodo?.parent_id) { await setParent(targetId, null); targetTodo!.parent_id = null; }
+            await addDependency(todoId, targetId);
+          } else {
+            // Right zone: dragged is successor of target (target → dragged)
+            if (draggedTodo?.parent_id) { await setParent(todoId, null); if (draggedTodo) draggedTodo.parent_id = null; }
+            if (targetTodo?.parent_id) { await setParent(targetId, null); targetTodo!.parent_id = null; }
+            await addDependency(targetId, todoId);
+          }
+          this.state.dependencies = await getDependencies();
+          this.render();
+        } catch (err) { this.showToast(this.translateError(err)); }
+      }
+      this.clearDragState();
+      return;
+    }
+
+    // Check todo reordering (no relationship editing in list view)
     const targetTodoItem = target.closest('.todo-item') as HTMLElement;
     if (targetTodoItem && targetTodoItem !== todoItem) {
       const targetId = targetTodoItem.getAttribute('data-id');
@@ -1509,6 +1711,8 @@ class TodoApp {
     document.querySelectorAll('.todo-item').forEach(el => {
       el.classList.remove('dragging');
       el.classList.remove('drag-over');
+      el.classList.remove('drag-over-top');
+      el.classList.remove('drag-over-bottom');
     });
     document.querySelectorAll('.category-item').forEach(el => {
       el.classList.remove('drag-over');
@@ -1527,6 +1731,701 @@ class TodoApp {
     if (statusPanel) statusPanel.classList.remove('active');
   }
 
+  // Flow/pipeline helpers
+  private getPredecessors(todoId: string): Todo[] {
+    const predIds = this.state.dependencies
+      .filter(d => d.successor_id === todoId)
+      .map(d => d.predecessor_id);
+    return this.state.todos.filter(t => predIds.includes(t.id));
+  }
+
+  private getSubtodos(todoId: string): Todo[] {
+    return this.state.todos.filter(t => t.parent_id === todoId);
+  }
+
+  private hasIncompletePredecessors(todoId: string): boolean {
+    return this.getPredecessors(todoId).some(p => p.status !== 'completed');
+  }
+
+  private areSubtasksComplete(todoId: string): boolean {
+    const subtodos = this.getSubtodos(todoId);
+    if (subtodos.length === 0) return true;
+    return subtodos.every(t => t.status === 'completed');
+  }
+
+  private canSetStatus(todoId: string, newStatus: string): { allowed: boolean; reason: string } {
+    if (newStatus === 'in_progress' || newStatus === 'completed') {
+      if (this.hasIncompletePredecessors(todoId)) {
+        const blockedBy = this.getPredecessors(todoId)
+          .filter(p => p.status !== 'completed')
+          .map(p => p.name)
+          .join(', ');
+        return { allowed: false, reason: `${t('blockedBy')}: ${blockedBy}` };
+      }
+    }
+    if (newStatus === 'completed') {
+      if (!this.areSubtasksComplete(todoId)) {
+        return { allowed: false, reason: t('completeSubtasksFirst') };
+      }
+    }
+    return { allowed: true, reason: '' };
+  }
+
+  private computeDepth(todoId: string, visited = new Set<string>()): number {
+    if (visited.has(todoId)) return 0;
+    visited.add(todoId);
+    const todo = this.state.todos.find(t => t.id === todoId);
+    if (!todo || !todo.parent_id) return 0;
+    return 1 + this.computeDepth(todo.parent_id, visited);
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  private translateError(err: unknown): string {
+    const msg = String(err);
+    if (msg.includes('Circular dependency')) return t('circularDependency');
+    if (msg.includes('depend on itself')) return t('selfDependency');
+    if (msg.includes('own parent')) return t('selfParent');
+    if (msg.includes('already exists')) return t('dependencyExists');
+    return msg;
+  }
+
+  private showToast(message: string) {
+    const existing = document.querySelector('.flow-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'flow-toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => toast.classList.add('visible'));
+
+    setTimeout(() => {
+      toast.classList.remove('visible');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  private lastStatusToggle = 0;
+
+  setViewMode(isFlow: boolean) {
+    this.state.flowViewOpen = isFlow;
+    this.render();
+  }
+
+  // Flow chart zoom/pan state (keyed by flow index)
+  // --- FlowCanvas interaction state (per-flow-index, not serialized) ---
+  private flowCanvasZoom: Map<number, number> = new Map();
+  private flowCanvasPanX: Map<number, number> = new Map();
+  private flowCanvasPanY: Map<number, number> = new Map();
+  private flowNodePositions: Map<string, { x: number; y: number }> = new Map();
+  private flowCanvasDrag: {
+    type: 'node' | 'handle' | 'pan' | 'edge';
+    flowIndex: number;
+    sourceId?: string;
+    handle?: string;
+    startX: number;
+    startY: number;
+    ghost?: HTMLElement;
+    origLeft?: number;
+    origTop?: number;
+  } | null = null;
+
+  // Zoom via button
+  flowCanvasZoomBtn(index: number, delta: number) {
+    const cur = this.flowCanvasZoom.get(index) || 1;
+    const next = Math.max(0.3, Math.min(3, cur + delta));
+    this.flowCanvasZoom.set(index, next);
+    this.applyFlowCanvasTransform(index);
+  }
+
+  // Zoom via wheel
+  flowCanvasWheel(index: number, event: WheelEvent) {
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? -0.1 : 0.1;
+    this.flowCanvasZoomBtn(index, delta);
+  }
+
+  // Reset zoom/pan and node positions
+  flowCanvasReset(index: number) {
+    this.flowCanvasZoom.delete(index);
+    this.flowCanvasPanX.delete(index);
+    this.flowCanvasPanY.delete(index);
+    this.flowNodePositions.clear();
+    this.render();
+  }
+
+  // Apply CSS transform to a flow canvas scene
+  applyFlowCanvasTransform(index: number) {
+    const scene = document.getElementById(`flow-scene-${index}`);
+    if (!scene) return;
+    const z = this.flowCanvasZoom.get(index) || 1;
+    const px = this.flowCanvasPanX.get(index) || 0;
+    const py = this.flowCanvasPanY.get(index) || 0;
+    scene.style.transform = `scale(${z}) translate(${px}px, ${py}px)`;
+  }
+
+  // Pan start (mousedown on canvas background)
+  flowCanvasPanStart(index: number, event: MouseEvent) {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('.flow-node') ||
+        (event.target as HTMLElement).closest('.flow-node-handle')) return;
+    event.preventDefault();
+    this.flowCanvasDrag = { type: 'pan', flowIndex: index, startX: event.clientX, startY: event.clientY };
+    const onMove = (e: MouseEvent) => {
+      if (!this.flowCanvasDrag || this.flowCanvasDrag.type !== 'pan') return;
+      const dx = e.clientX - this.flowCanvasDrag.startX;
+      const dy = e.clientY - this.flowCanvasDrag.startY;
+      this.flowCanvasDrag.startX = e.clientX;
+      this.flowCanvasDrag.startY = e.clientY;
+      this.flowCanvasPanX.set(index, (this.flowCanvasPanX.get(index) || 0) + dx);
+      this.flowCanvasPanY.set(index, (this.flowCanvasPanY.get(index) || 0) + dy);
+      this.applyFlowCanvasTransform(index);
+    };
+    const onUp = () => {
+      this.flowCanvasDrag = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // Node drag start (reposition node within canvas)
+  flowCanvasNodeDown(event: MouseEvent, todoId: string, flowIndex: number) {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('.flow-node-handle')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const nodeEl = (event.target as HTMLElement).closest('.flow-node') as HTMLElement;
+    if (!nodeEl) return;
+    nodeEl.setAttribute('dragging', '');
+
+    const svg = document.querySelector(`#flow-scene-${flowIndex} .flow-svg`);
+    // Save original positions of children once
+    const childOrigins: Map<string, { l: number; t: number }> = new Map();
+    const draggedTodo = this.state.todos.find(t => t.id === todoId);
+    const childIds = this.state.todos.filter(t => t.parent_id === todoId).map(t => t.id);
+    for (const cid of childIds) {
+      const cel = document.querySelector(`.flow-node[data-todo-id="${cid}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+      if (cel) childOrigins.set(cid, { l: parseFloat(cel.style.left) || 0, t: parseFloat(cel.style.top) || 0 });
+    }
+
+    this.flowCanvasDrag = {
+      type: 'node', flowIndex, sourceId: todoId,
+      startX: event.clientX, startY: event.clientY,
+      origLeft: parseInt(nodeEl.style.left), origTop: parseInt(nodeEl.style.top),
+    };
+
+    const onMove = (e: MouseEvent) => {
+      if (!this.flowCanvasDrag || this.flowCanvasDrag.type !== 'node') return;
+      const z = this.flowCanvasZoom.get(flowIndex) || 1;
+      const dx = (e.clientX - this.flowCanvasDrag.startX) / z;
+      const dy = (e.clientY - this.flowCanvasDrag.startY) / z;
+      const nl = (this.flowCanvasDrag.origLeft || 0) + dx;
+      const nt = (this.flowCanvasDrag.origTop || 0) + dy;
+      nodeEl.style.left = nl + 'px';
+      nodeEl.style.top = nt + 'px';
+
+      // Move children using saved origins (not cumulative)
+      for (const [cid, orig] of childOrigins) {
+        const cel = document.querySelector(`.flow-node[data-todo-id="${cid}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+        if (cel) {
+          cel.style.left = (orig.l + dx) + 'px';
+          cel.style.top = (orig.t + dy) + 'px';
+        }
+      }
+
+      // Recalculate connected edge paths
+      const allEdgePaths = svg ? svg.querySelectorAll('[data-from][data-to]') : [];
+      allEdgePaths.forEach((edge: Element) => {
+        const fromId = edge.getAttribute('data-from');
+        const toId = edge.getAttribute('data-to');
+        if (!fromId || !toId) return;
+        const isDep = edge.classList.contains('flow-edge-dep');
+        const fromEl = document.querySelector(`.flow-node[data-todo-id="${fromId}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+        const toEl = document.querySelector(`.flow-node[data-todo-id="${toId}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+        if (!fromEl || !toEl) return;
+        const fx = parseFloat(fromEl.style.left) || 0;
+        const fy = parseFloat(fromEl.style.top) || 0;
+        const tx = parseFloat(toEl.style.left) || 0;
+        const ty = parseFloat(toEl.style.top) || 0;
+        if (isDep) {
+          edge.setAttribute('d', bezierD(fx + NODE_W, fy + NODE_H / 2, tx, ty + NODE_H / 2));
+        } else {
+          // Parent-child edge: vertical curve from parent center-bottom to child center-top
+          edge.setAttribute('d', `M${fx + NODE_W / 2} ${fy + NODE_H} C${fx + NODE_W / 2} ${(fy + NODE_H + ty) / 2} ${tx + 90} ${(fy + NODE_H + ty) / 2} ${tx + 90} ${ty}`);
+        }
+      });
+    };
+
+    const onUp = () => {
+      nodeEl.removeAttribute('dragging');
+      // Save positions for dragged node and its children
+      this.flowNodePositions.set(todoId, {
+        x: parseInt(nodeEl.style.left) || 0,
+        y: parseInt(nodeEl.style.top) || 0,
+      });
+      const childIds = this.state.todos.filter(t => t.parent_id === todoId).map(t => t.id);
+      for (const cid of childIds) {
+        const cel = document.querySelector(`.flow-node[data-todo-id="${cid}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+        if (cel) this.flowNodePositions.set(cid, { x: parseInt(cel.style.left) || 0, y: parseInt(cel.style.top) || 0 });
+      }
+      this.flowCanvasDrag = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // Edge drag: pull endpoint to reassign or delete
+  // Edge drag: pull away to delete / reassign with preview animation
+  flowCanvasEdgeDown(event: MouseEvent, depId: string, fromId: string, toId: string, flowIndex: number) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const z = this.flowCanvasZoom.get(flowIndex) || 1;
+    const pathEl = event.target as SVGPathElement;
+    const svg = document.querySelector(`#flow-scene-${flowIndex} .flow-svg`);
+    this.flowCanvasDrag = { type: 'edge', flowIndex, sourceId: depId, startX: event.clientX, startY: event.clientY };
+    let snappedId: string | null = null;
+    let previewLine: SVGPathElement | null = null;
+
+    // Helper to get node center in SVG coords
+    const nodeCenter = (nid: string): { x: number; y: number } | null => {
+      const el = document.querySelector(`.flow-node[data-todo-id="${nid}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+      if (!el) return null;
+      return { x: parseFloat(el.style.left) + NODE_W / 2, y: parseFloat(el.style.top) + NODE_H / 2 };
+    };
+
+    const onMove = (e: MouseEvent) => {
+      if (!this.flowCanvasDrag || this.flowCanvasDrag.type !== 'edge') return;
+      const dx = (e.clientX - this.flowCanvasDrag.startX) / z;
+      const dy = (e.clientY - this.flowCanvasDrag.startY) / z;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      pathEl.classList.toggle('flow-edge-dragging', dist > 20);
+
+      // Clean up old preview
+      document.querySelectorAll('.flow-node.edge-snap').forEach(n => n.classList.remove('edge-snap'));
+      if (previewLine) { previewLine.remove(); previewLine = null; }
+      snappedId = null;
+
+      if (depId && dist > 20) {
+        const scene = document.getElementById(`flow-scene-${flowIndex}`);
+        const sr = scene?.getBoundingClientRect();
+        let best = Infinity;
+        document.querySelectorAll(`.flow-node[data-flow-index="${flowIndex}"]`).forEach((n: Element) => {
+          const nodeEl = n as HTMLElement;
+          const nid = nodeEl.dataset.todoId;
+          if (!nid || nid === fromId || nid === toId) return;
+          if (!sr) return;
+          const cx = (e.clientX - sr.left) / z;
+          const cy = (e.clientY - sr.top) / z;
+          const nx = parseFloat(nodeEl.style.left) + NODE_W / 2;
+          const ny = parseFloat(nodeEl.style.top) + NODE_H / 2;
+          const d = Math.hypot(cx - nx, cy - ny);
+          if (d < 80 && d < best) { best = d; snappedId = nid; }
+        });
+
+        if (snappedId) {
+          document.querySelector(`.flow-node[data-todo-id="${snappedId}"]`)?.classList.add('edge-snap');
+          // Draw preview line from old predecessor to new successor
+          const from = nodeCenter(fromId);
+          const to = nodeCenter(snappedId);
+          if (from && to && svg) {
+            previewLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const x1 = from.x + NODE_W / 2, y1 = from.y;
+            const x2 = to.x - NODE_W / 2, y2 = to.y;
+            const d = `M${x1} ${y1} C${x1 + 60} ${y1} ${x2 - 60} ${y2} ${x2} ${y2}`;
+            previewLine.setAttribute('d', d);
+            previewLine.setAttribute('class', 'flow-edge flow-edge-preview');
+            previewLine.setAttribute('fill', 'none');
+            svg.appendChild(previewLine);
+          }
+        }
+      }
+    };
+
+    const onUp = async (upEvent: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.querySelectorAll('.flow-node.edge-snap').forEach(n => n.classList.remove('edge-snap'));
+      if (previewLine) { previewLine.remove(); previewLine = null; }
+      pathEl.classList.remove('flow-edge-dragging');
+
+      const dx = (upEvent.clientX - this.flowCanvasDrag!.startX) / z;
+      const dy = (upEvent.clientY - this.flowCanvasDrag!.startY) / z;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (depId && snappedId) {
+        try {
+          await removeDependency(depId);
+          await addDependency(fromId, snappedId);
+          this.state.dependencies = await getDependencies();
+          this.flowNodePositions.clear();
+          this.render();
+        } catch (err) { this.showToast(this.translateError(err)); }
+      } else if (depId && dist > 80) {
+        try {
+          await removeDependency(depId);
+          this.state.dependencies = await getDependencies();
+          this.flowNodePositions.clear();
+          this.render();
+        } catch (err) { this.showToast(this.translateError(err)); }
+      } else if (!depId && dist > 80) {
+        try {
+          await setParent(toId, null);
+          const todo = this.state.todos.find(t => t.id === toId);
+          if (todo) todo.parent_id = null;
+          this.render();
+        } catch (err) { this.showToast(this.translateError(err)); }
+      }
+      this.flowCanvasDrag = null;
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // Handle drag: create edges with animated temporary line
+  flowCanvasHandleDown(event: MouseEvent, todoId: string, handle: string, flowIndex: number) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const sourceTodo = this.state.todos.find(t => t.id === todoId);
+    if (!sourceTodo) return;
+
+    // Get source node position for temp line
+    const srcNode = document.querySelector(`.flow-node[data-todo-id="${todoId}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+    if (!srcNode) return;
+    const sx = parseFloat(srcNode.style.left) + (handle === 'right' ? NODE_W : handle === 'left' ? 0 : NODE_W / 2);
+    const sy = parseFloat(srcNode.style.top) + (handle === 'bottom' ? NODE_H : NODE_H / 2);
+
+    // Create temporary line
+    const svg = document.querySelector(`#flow-scene-${flowIndex} .flow-svg`);
+    let tmpLine: SVGLineElement | null = null;
+    if (svg) {
+      tmpLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      tmpLine.setAttribute('x1', String(sx));
+      tmpLine.setAttribute('y1', String(sy));
+      tmpLine.setAttribute('x2', String(sx));
+      tmpLine.setAttribute('y2', String(sy));
+      tmpLine.setAttribute('class', 'flow-edge flow-edge-temp');
+      svg.appendChild(tmpLine);
+    }
+
+    this.flowCanvasDrag = { type: 'handle', flowIndex, sourceId: todoId, handle, startX: event.clientX, startY: event.clientY };
+    const onMove = (e: MouseEvent) => {
+      if (!this.flowCanvasDrag || this.flowCanvasDrag.type !== 'handle') return;
+      document.querySelectorAll('.flow-node.drag-target').forEach(n => n.classList.remove('drag-target'));
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const targetNode = el?.closest('.flow-node') as HTMLElement;
+      if (!targetNode || targetNode.dataset.todoId === todoId) {
+        // Still update temp line
+        if (tmpLine) {
+          const rect = svg?.getBoundingClientRect();
+          const z = this.flowCanvasZoom.get(flowIndex) || 1;
+          if (rect) { tmpLine.setAttribute('x2', String((e.clientX - rect.left) / z)); tmpLine.setAttribute('y2', String((e.clientY - rect.top) / z)); }
+        }
+        return;
+      }
+      if (handle === 'bottom') {
+        // Target must not be a subtask already, and source is the parent
+        const tt = this.state.todos.find(t => t.id === targetNode.dataset.todoId);
+        if (tt?.parent_id || this.state.todos.some(t => t.parent_id === targetNode.dataset.todoId)) return;
+      }
+      targetNode.classList.add('drag-target');
+      // Update temp line to target
+      if (tmpLine) {
+        const tx = parseFloat(targetNode.style.left) + (handle === 'right' ? 0 : handle === 'left' ? NODE_W : NODE_W / 2);
+        const ty = parseFloat(targetNode.style.top) + NODE_H / 2;
+        tmpLine.setAttribute('x2', String(tx));
+        tmpLine.setAttribute('y2', String(ty));
+      }
+    };
+
+    const onUp = async (e: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.querySelectorAll('.flow-node.drag-target').forEach(n => n.classList.remove('drag-target'));
+      if (tmpLine) { tmpLine.remove(); tmpLine = null; }
+      if (!this.flowCanvasDrag || this.flowCanvasDrag.type !== 'handle') { this.flowCanvasDrag = null; return; }
+      const sourceId = this.flowCanvasDrag.sourceId;
+      const h = this.flowCanvasDrag.handle;
+      this.flowCanvasDrag = null;
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const targetNode = el?.closest('.flow-node') as HTMLElement;
+      if (!targetNode || !sourceId) return;
+      const targetId = targetNode.dataset.todoId;
+      if (!targetId || targetId === sourceId) return;
+      const targetTodo = this.state.todos.find(t => t.id === targetId);
+
+      try {
+        if (h === 'right' || h === 'left') {
+          if (sourceTodo.parent_id) { await setParent(sourceId, null); sourceTodo.parent_id = null; }
+          if (targetTodo?.parent_id) { await setParent(targetId, null); targetTodo.parent_id = null; }
+          if (h === 'right') await addDependency(sourceId, targetId);
+          else await addDependency(targetId, sourceId);
+        } else if (h === 'bottom') {
+          // Dragging bottom handle: target becomes child of source
+          const hasDeps = this.state.dependencies.some(d => d.predecessor_id === targetId || d.successor_id === targetId);
+          if (hasDeps) { this.showToast(t('hasDepsNoSubtask')); return; }
+          if (sourceTodo.parent_id) { this.showToast(t('noGrandchild')); return; }
+          const targetHasChildren = this.state.todos.some(t => t.parent_id === targetId);
+          if (targetHasChildren) { this.showToast(t('hasChildrenNoSubtask')); return; }
+          await setParent(targetId, sourceId);
+          if (targetTodo) targetTodo.parent_id = sourceId;
+        }
+        this.state.dependencies = await getDependencies();
+        this.render();
+      } catch (err) { this.showToast(this.translateError(err)); }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // Double-click parent edge to remove subtask relationship
+  async flowCanvasParentEdgeDblClick(childId: string) {
+    try {
+      await setParent(childId, null);
+      const todo = this.state.todos.find(t => t.id === childId);
+      if (todo) todo.parent_id = null;
+      this.render();
+      this.showToast(t('subtaskRemoved'));
+    } catch (err) { this.showToast(this.translateError(err)); }
+  }
+
+  // Double-click edge to delete
+  async flowCanvasEdgeDblClick(depId: string) {
+    if (!depId) return;
+    try {
+      await removeDependency(depId);
+      this.state.dependencies = await getDependencies();
+      this.render();
+      this.showToast(t('depDeleted'));
+    } catch (err) {
+      this.showToast(String(err));
+    }
+  }
+
+  // Right-click node → context menu
+  flowCanvasNodeContext(event: MouseEvent, todoId: string, flowIndex: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuItems = [
+      { label: '编辑', action: `window.todoApp.editTodo('${todoId}')` },
+      { label: '删除待办', action: `window.todoApp.confirmDelete('${todoId}')` },
+      { label: '从流程中移除', action: `window.todoApp.removeFromFlow('${todoId}')` },
+    ];
+    this.showFlowContextMenu(event.clientX, event.clientY, menuItems);
+  }
+
+  // Remove todo from flow: clear all its dependencies + parent
+  async removeFromFlow(todoId: string) {
+    try {
+      // Remove all deps involving this todo
+      const deps = this.state.dependencies.filter(
+        d => d.predecessor_id === todoId || d.successor_id === todoId
+      );
+      for (const d of deps) await removeDependency(d.id);
+      // Clear parent
+      await setParent(todoId, null);
+      const todo = this.state.todos.find(t => t.id === todoId);
+      if (todo) todo.parent_id = null;
+      this.state.dependencies = await getDependencies();
+      this.render();
+      this.showToast(t('removedFromFlow'));
+    } catch (err) {
+      this.showToast(String(err));
+    }
+  }
+
+  // Clear all dependencies (with confirmation via existing confirm modal)
+  clearAllDependencies() {
+    this.state.isConfirmOpen = true;
+    this.state.confirmType = 'clearDeps';
+    this.state.confirmTargetId = null;
+    this.render();
+  }
+
+  async executeClearDependencies() {
+    try {
+      for (const d of this.state.dependencies) {
+        await removeDependency(d.id);
+      }
+      this.state.dependencies = [];
+      this.render();
+      this.showToast(t('allDepsCleared'));
+    } catch (err) {
+      this.showToast(String(err));
+    }
+  }
+
+  // Simple context menu for canvas
+  private showFlowContextMenu(x: number, y: number, items: { label: string; action: string }[]) {
+    const existing = document.getElementById('flow-context-menu');
+    if (existing) existing.remove();
+    const menu = document.createElement('div');
+    menu.id = 'flow-context-menu';
+    menu.className = 'flow-context-menu';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.innerHTML = items.map(i =>
+      `<div class="flow-context-item" onclick="(${i.action});document.getElementById('flow-context-menu')?.remove()">${i.label}</div>`
+    ).join('');
+    document.body.appendChild(menu);
+    const close = (e: Event) => {
+      if (!menu.contains(e.target as Node)) { menu.remove(); document.removeEventListener('click', close); }
+    };
+    setTimeout(() => document.addEventListener('click', close), 0);
+  }
+
+  private matchesFilters(todo: Todo): boolean {
+    const { filterStatus, filterCategory, searchQuery } = this.state;
+    if (filterStatus !== 'all' && todo.status !== filterStatus) return false;
+    if (filterCategory !== null) {
+      if (filterCategory === 'daily' && !todo.is_daily) return false;
+      if (filterCategory !== 'daily' && todo.category_id !== filterCategory) return false;
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!todo.name.toLowerCase().includes(q) && !todo.notes.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  }
+
+  // Form dependency helpers
+  async removeDependencyAndRefresh(depId: string) {
+    if (!depId) return;
+    try {
+      await removeDependency(depId);
+      this.state.dependencies = await getDependencies();
+      this.render();
+    } catch (err) {
+      console.error('Failed to remove dependency:', err);
+    }
+  }
+
+  async addPredecessorFromForm(todoId: string) {
+    const select = document.getElementById('add-predecessor-select') as HTMLSelectElement;
+    if (!select || !select.value) return;
+    try {
+      await addDependency(select.value, todoId);
+      this.state.dependencies = await getDependencies();
+      this.render();
+    } catch (err) {
+      this.showToast(String(err));
+    }
+  }
+
+  async clearParentAndRefresh(todoId: string) {
+    try {
+      await setParent(todoId, null);
+      const todo = this.state.todos.find(t => t.id === todoId);
+      if (todo) todo.parent_id = null;
+      this.render();
+    } catch (err) {
+      console.error('Failed to clear parent:', err);
+    }
+  }
+
+  private getFlows(): { roots: Todo[]; todos: Todo[] }[] {
+    // Build adjacency for connected components (undirected: dependencies + parent-child)
+    const adj = new Map<string, Set<string>>();
+    const ensure = (id: string) => {
+      if (!adj.has(id)) adj.set(id, new Set());
+      return adj.get(id)!;
+    };
+
+    for (const dep of this.state.dependencies) {
+      ensure(dep.predecessor_id).add(dep.successor_id);
+      ensure(dep.successor_id).add(dep.predecessor_id);
+    }
+    for (const t of this.state.todos) {
+      if (t.parent_id) {
+        ensure(t.id).add(t.parent_id);
+        ensure(t.parent_id).add(t.id);
+      }
+    }
+
+    const visited = new Set<string>();
+    const flows: { roots: Todo[]; todos: Todo[] }[] = [];
+
+    // Sort todo ids for consistent order
+    const sortedTodos = [...this.state.todos].sort((a, b) => a.position - b.position);
+
+    for (const t of sortedTodos) {
+      if (visited.has(t.id)) continue;
+      if (!adj.has(t.id)) continue; // isolated todo = no flow
+
+      const component: string[] = [];
+      const queue = [t.id];
+      visited.add(t.id);
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        component.push(cur);
+        for (const nb of adj.get(cur) || []) {
+          if (!visited.has(nb)) {
+            visited.add(nb);
+            queue.push(nb);
+          }
+        }
+      }
+
+      const flowTodos = component
+        .map(id => this.state.todos.find(td => td.id === id)!)
+        .filter(Boolean);
+      const roots = flowTodos.filter(td => !td.parent_id && !this.state.dependencies.some(d => d.successor_id === td.id));
+      const ordered: Todo[] = [];
+      const visitedInner = new Set<string>();
+      const visit = (todo: Todo) => {
+        if (visitedInner.has(todo.id)) return;
+        visitedInner.add(todo.id);
+        ordered.push(todo);
+        const children = flowTodos
+          .filter(c => c.parent_id === todo.id)
+          .sort((a, b) => a.position - b.position);
+        for (const child of children) visit(child);
+        const successors = flowTodos
+          .filter(c => this.state.dependencies.some(d => d.predecessor_id === todo.id && d.successor_id === c.id))
+          .sort((a, b) => a.position - b.position);
+        for (const s of successors) visit(s);
+      };
+      for (const root of roots.sort((a, b) => a.position - b.position)) visit(root);
+
+      flows.push({ roots, todos: ordered });
+    }
+
+    return flows;
+  }
+
+  private getFlowOrderedTodos(): Todo[] {
+    const rootTodos = this.state.todos.filter(t => !t.parent_id);
+    const ordered: Todo[] = [];
+    const visit = (todo: Todo) => {
+      ordered.push(todo);
+      const children = this.state.todos
+        .filter(t => t.parent_id === todo.id)
+        .sort((a, b) => a.position - b.position);
+      for (const child of children) {
+        visit(child);
+      }
+    };
+    rootTodos.sort((a, b) => a.position - b.position);
+    for (const root of rootTodos) {
+      visit(root);
+    }
+    return ordered;
+  }
+
   handleStatusDragOver(event: MouseEvent, status: string) {
     document.querySelectorAll('.drag-status-item').forEach(el => el.classList.remove('drag-over'));
     const item = document.querySelector(`.drag-status-item[data-status="${status}"]`);
@@ -1543,11 +2442,18 @@ class TodoApp {
       return;
     }
 
+    const { allowed, reason } = this.canSetStatus(todoId, status);
+    if (!allowed) {
+      this.showToast(reason);
+      this.clearDragState();
+      return;
+    }
+
     try {
       await updateTodo(
         todo.id, todo.name, todo.due_date, todo.due_date_display, status,
         todo.notes, todo.quick_launch, todo.reminders, todo.category_id,
-        todo.priority, todo.is_daily
+        todo.priority, todo.is_daily, todo.parent_id
       );
       this.state.todos = await getTodos();
       this.render();

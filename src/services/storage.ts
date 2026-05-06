@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Todo, Category, Settings, Reminder } from '../types';
+import type { Todo, Category, Settings, Reminder, Dependency } from '../types';
 
 // Todo operations
 export async function getTodos(): Promise<Todo[]> {
@@ -14,7 +14,8 @@ export async function createTodo(
   priority: string,
   isDaily: boolean,
   status: string = 'pending',
-  dailyTime: string | null = null
+  dailyTime: string | null = null,
+  parentId: string | null = null
 ): Promise<Todo> {
   return await invoke('create_todo', {
     name,
@@ -25,6 +26,7 @@ export async function createTodo(
     isDaily,
     status,
     dailyTime,
+    parentId,
   });
 }
 
@@ -40,7 +42,8 @@ export async function updateTodo(
   categoryId: string | null,
   priority: string,
   isDaily: boolean,
-  dailyTime: string | null = null
+  dailyTime: string | null = null,
+  parentId: string | null = null
 ): Promise<void> {
   return await invoke('update_todo', {
     id,
@@ -55,6 +58,7 @@ export async function updateTodo(
     priority,
     isDaily,
     dailyTime,
+    parentId,
   });
 }
 
@@ -127,6 +131,23 @@ export async function getAutoStart(): Promise<boolean> {
 // Daily reset
 export async function resetDailyTodos(): Promise<void> {
   return await invoke('reset_daily_todos');
+}
+
+// Dependency operations
+export async function getDependencies(): Promise<Dependency[]> {
+  return await invoke('get_dependencies');
+}
+
+export async function addDependency(predecessorId: string, successorId: string): Promise<Dependency> {
+  return await invoke('add_dependency', { predecessorId, successorId });
+}
+
+export async function removeDependency(id: string): Promise<void> {
+  return await invoke('remove_dependency', { id });
+}
+
+export async function setParent(todoId: string, parentId: string | null): Promise<void> {
+  return await invoke('set_parent', { todoId, parentId });
 }
 
 // Open path (auto-detect type: URL, folder, or executable)

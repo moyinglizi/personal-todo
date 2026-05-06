@@ -17,6 +17,7 @@ export interface Todo {
   is_daily: boolean;
   last_daily_reset: string | null;
   daily_time: string | null;
+  parent_id: string | null;
 }
 
 export interface Category {
@@ -33,6 +34,13 @@ export interface Reminder {
   id: string;
   offsetMinutes: number;
   triggered: boolean;
+}
+
+export interface Dependency {
+  id: string;
+  predecessor_id: string;
+  successor_id: string;
+  created_at: string;
 }
 
 export interface Shortcuts {
@@ -73,9 +81,11 @@ export interface AppState {
   isSettingsOpen: boolean;
   isCategoryManagerOpen: boolean;
   isConfirmOpen: boolean;
-  confirmType: 'todo' | 'category' | null;
+  confirmType: 'todo' | 'category' | 'clearDeps' | null;
   confirmTargetId: string | null;
   draggingTodoId: string | null;
   draggingCategoryId: string | null;
   todoListScrollTop: number;
+  dependencies: Dependency[];
+  flowViewOpen: boolean;
 }

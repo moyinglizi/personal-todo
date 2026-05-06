@@ -138,6 +138,66 @@ export interface Translations {
   position: string;
   createdAt: string;
   dropToDelete: string;
+
+  // Flow / Pipeline
+  flowView: string;
+  listView: string;
+  dependencies: string;
+  predecessors: string;
+  successors: string;
+  subtasks: string;
+  setAsPrerequisite: string;
+  setAsSuccessor: string;
+  makeSubtask: string;
+  blockedBy: string;
+  completeSubtasksFirst: string;
+  none: string;
+  addPredecessor: string;
+  remove: string;
+  parentTodo: string;
+  flow: string;
+  otherTodos: string;
+  noFlowsYet: string;
+  flowHint: string;
+  zoomIn: string;
+  zoomOut: string;
+  resetZoom: string;
+  todoItems: string;
+  flowReadonly: string;
+  clearAllDeps: string;
+  confirmClearDeps: string;
+  confirmClearDepsDesc: string;
+
+  // Toast messages
+  switchedToFlowView: string;
+  switchedToListView: string;
+  depDeleted: string;
+  depReconnected: string;
+  subtaskMoved: string;
+  subtaskRemoved: string;
+  removedFromFlow: string;
+  allDepsCleared: string;
+  hasDepsNoSubtask: string;
+  noSubtaskOfSubtask: string;
+  hasChildrenNoSubtask: string;
+  noGrandchild: string;
+  dragToCanvas: string;
+  clickToToggleStatus: string;
+
+  // Rust error translations
+  circularDependency: string;
+  selfDependency: string;
+  dependencyExists: string;
+  selfParent: string;
+
+  // Flow help
+  flowHelp: string;
+  flowHelpIntro: string;
+  flowHelpDep: string;
+  flowHelpSubtask: string;
+  flowHelpEdge: string;
+  flowHelpView: string;
+  flowHelpRules: string;
 }
 
 const translations: Record<Language, Translations> = {
@@ -266,6 +326,63 @@ const translations: Record<Language, Translations> = {
     position: 'Position',
     createdAt: 'Created',
     dropToDelete: 'Drop here to delete',
+
+    // Flow / Pipeline
+    flowView: 'Flow View',
+    listView: 'List View',
+    dependencies: 'Dependencies',
+    predecessors: 'Prerequisites',
+    successors: 'Dependents',
+    subtasks: 'Subtasks',
+    setAsPrerequisite: 'Set as prerequisite',
+    setAsSuccessor: 'Set as successor',
+    makeSubtask: 'Make subtask',
+    blockedBy: 'Blocked by',
+    completeSubtasksFirst: 'Complete all subtasks first',
+    none: 'None',
+    addPredecessor: 'Add prerequisite',
+    remove: 'Remove',
+    parentTodo: 'Parent',
+    flow: 'Flow',
+    otherTodos: 'Other',
+    noFlowsYet: 'No flows configured yet',
+    flowHint: 'Drag one todo onto another todo\'s top half to create a dependency, or onto the bottom half to make it a subtask.',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    resetZoom: 'Reset',
+    todoItems: 'Items',
+    flowReadonly: 'Read-only – switch to a category to edit flow',
+    clearAllDeps: 'Clear All',
+    confirmClearDeps: 'Clear All Dependencies?',
+    confirmClearDepsDesc: 'This will remove all predecessor/successor relationships. Todo items will not be deleted.',
+
+    switchedToFlowView: 'Switched to Flow View',
+    switchedToListView: 'Switched to List View',
+    depDeleted: 'Dependency deleted',
+    depReconnected: 'Dependency reconnected',
+    subtaskMoved: 'Subtask relationship updated',
+    subtaskRemoved: 'Subtask relationship removed',
+    removedFromFlow: 'Removed from flow',
+    allDepsCleared: 'All dependencies cleared',
+    hasDepsNoSubtask: 'Tasks with dependencies cannot become subtasks',
+    noSubtaskOfSubtask: 'Cannot create nested subtasks',
+    hasChildrenNoSubtask: 'Tasks with subtasks cannot become subtasks',
+    noGrandchild: 'Cannot create nested subtasks',
+    dragToCanvas: 'Drag todos here',
+    clickToToggleStatus: 'Click to toggle status',
+
+    circularDependency: 'Circular dependency detected',
+    selfDependency: 'A task cannot depend on itself',
+    dependencyExists: 'Dependency already exists',
+    selfParent: 'A task cannot be its own parent',
+
+    flowHelp: 'Flow & Canvas Guide',
+    flowHelpIntro: 'The flow system lets you organize tasks with dependencies and subtasks. Switch to Flow View to see the visual canvas.',
+    flowHelpDep: 'Create a dependency by dragging the right handle of task A to task B — A must complete before B can start.',
+    flowHelpSubtask: 'Create a subtask by dragging the bottom handle of task A to task B — B becomes a child of A.',
+    flowHelpEdge: 'Double-click an edge to delete it. Drag an edge to another node to reassign. Drag an edge away and release to delete.',
+    flowHelpView: 'All Todos view is read-only. Select a specific category to edit relationships in the canvas.',
+    flowHelpRules: 'Subtasks cannot have their own dependencies. A parent cannot be completed until all subtasks are done.',
   },
 
   zh: {
@@ -393,6 +510,63 @@ const translations: Record<Language, Translations> = {
     position: '位置',
     createdAt: '创建时间',
     dropToDelete: '拖放到此处删除',
+
+    // Flow / Pipeline
+    flowView: '流程视图',
+    listView: '列表视图',
+    dependencies: '依赖关系',
+    predecessors: '前置任务',
+    successors: '后继任务',
+    subtasks: '子任务',
+    setAsPrerequisite: '设为前置',
+    setAsSuccessor: '设为后置',
+    makeSubtask: '设为子任务',
+    blockedBy: '被阻塞',
+    completeSubtasksFirst: '请先完成所有子任务',
+    none: '无',
+    addPredecessor: '添加前置任务',
+    remove: '移除',
+    parentTodo: '父任务',
+    flow: '流程',
+    otherTodos: '其他',
+    noFlowsYet: '暂无流程',
+    flowHint: '拖拽一个待办到另一个待办的上半区域创建前置依赖，或拖到下半区域设为子任务。',
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    resetZoom: '重置',
+    todoItems: '待办条目',
+    flowReadonly: '全部待办为只读 – 请切换到对应分类编辑流程',
+    clearAllDeps: '清除全部',
+    confirmClearDeps: '确认清除所有依赖关系？',
+    confirmClearDepsDesc: '这将移除全部前置/后继关系，待办事项不会被删除。',
+
+    switchedToFlowView: '已切换到流程视图',
+    switchedToListView: '已切换到列表视图',
+    depDeleted: '依赖已删除',
+    depReconnected: '依赖已重连',
+    subtaskMoved: '子任务关系已更新',
+    subtaskRemoved: '子任务关系已解除',
+    removedFromFlow: '已从流程中移除',
+    allDepsCleared: '所有依赖关系已清除',
+    hasDepsNoSubtask: '已有依赖关系的任务不能设为子任务',
+    noSubtaskOfSubtask: '不能设为子任务的子任务',
+    hasChildrenNoSubtask: '已有子任务的待办不能设为子任务',
+    noGrandchild: '不能创建嵌套子任务',
+    dragToCanvas: '拖拽待办到此处',
+    clickToToggleStatus: '点击切换状态',
+
+    circularDependency: '检测到循环依赖',
+    selfDependency: '任务不能依赖自身',
+    dependencyExists: '依赖关系已存在',
+    selfParent: '任务不能设为自身的子任务',
+
+    flowHelp: '流程与画布说明',
+    flowHelpIntro: '流程系统可以为任务设置前置依赖和子任务。切换到流程视图即可看到可视化画布。',
+    flowHelpDep: '创建依赖：拖拽任务 A 的右侧手柄到任务 B — A 完成后 B 才能开始。',
+    flowHelpSubtask: '创建子任务：拖拽任务 A 的底部手柄到任务 B — B 成为 A 的子任务。',
+    flowHelpEdge: '双击连线删除。拖拽连线到另一节点可重连。拖拽连线到空白处松手可删除。',
+    flowHelpView: '全部待办为只读模式，切换到具体分类后可以在画布中编辑关系。',
+    flowHelpRules: '子任务不能有依赖关系。父任务在所有子任务完成前不能标记为已完成。',
   },
 };
 

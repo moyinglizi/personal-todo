@@ -1,4 +1,4 @@
-import type { Todo, Category, Reminder } from '../types';
+import type { Todo, Category, Reminder, Dependency } from '../types';
 import { parseReminders } from '../services/storage';
 import { t } from '../services/i18n';
 
@@ -7,7 +7,9 @@ export function renderTodoForm(
   categories: Category[],
   onSave: (data: TodoFormData) => void,
   onCancel: () => void,
-  onDelete: () => void
+  onDelete: () => void,
+  allTodos?: Todo[],
+  dependencies?: Dependency[]
 ): string {
   const isEdit = todo !== null;
   const title = isEdit ? t('editTodo') : t('newTodo');
@@ -154,6 +156,71 @@ export function renderTodoForm(
             <label for="todo-notes">${t('notes')}</label>
             <textarea id="todo-notes" rows="4" placeholder="${t('notesPlaceholder')}">${escapeHtml(notes)}</textarea>
           </div>
+
+          ${isEdit && allTodos && dependencies ? `
+          <div class="form-section">
+            <h3 class="form-section-title">${t('dependencies')}</h3>
+            <div class="flow-edit-section">
+              <div class="flow-edit-row">
+                <span class="flow-edit-label">${t('predecessors')}:</span>
+                <div class="flow-tag-list" id="predecessor-list">
+                  ${(() => {
+                    const preds = dependencies
+                      .filter(d => d.successor_id === todo!.id)
+                      .map(d => allTodos.find(t => t.id === d.predecessor_id))
+                      .filter(Boolean) as Todo[];
+                    return preds.length === 0
+                      ? `<span class="flow-empty-hint">${t('none')}</span>`
+                      : preds.map(p => `
+                        <span class="flow-tag">
+                          ${escapeHtml(p.name)}
+                          <button class="flow-tag-remove" onclick="window.todoApp.removeDependencyAndRefresh('${dependencies.find(d => d.successor_id === todo!.id && d.predecessor_id === p.id)?.id || ''}')" title="${t('remove')}">×</button>
+                        </span>
+                      `).join('');
+                  })()}
+                </div>
+              </div>
+              <div class="flow-edit-row">
+                <select id="add-predecessor-select" class="flow-add-select">
+                  <option value="">+ ${t('addPredecessor')}</option>
+                  ${allTodos
+                    .filter(t => t.id !== todo!.id && !dependencies.some(d => d.successor_id === todo!.id && d.predecessor_id === t.id))
+                    .map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('')}
+                </select>
+                <button class="btn-small" onclick="window.todoApp.addPredecessorFromForm('${todo!.id}')">${t('add')}</button>
+              </div>
+            </div>
+
+            <div class="flow-edit-section">
+              <div class="flow-edit-row">
+                <span class="flow-edit-label">${t('subtasks')}:</span>
+                <div class="flow-tag-list" id="subtask-list">
+                  ${(() => {
+                    const subs = allTodos.filter(t => t.parent_id === todo!.id);
+                    return subs.length === 0
+                      ? `<span class="flow-empty-hint">${t('none')}</span>`
+                      : subs.map(s => `
+                        <span class="flow-tag">
+                          ${escapeHtml(s.name)}
+                          <button class="flow-tag-remove" onclick="window.todoApp.clearParentAndRefresh('${s.id}')" title="${t('remove')}">×</button>
+                        </span>
+                      `).join('');
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            ${todo!.parent_id ? `
+            <div class="flow-edit-row">
+              <span class="flow-edit-label">${t('parentTodo')}:</span>
+              <span class="flow-tag">
+                ${escapeHtml(allTodos.find(t => t.id === todo!.parent_id)?.name || '')}
+                <button class="flow-tag-remove" onclick="window.todoApp.clearParentAndRefresh('${todo!.id}')" title="${t('remove')}">×</button>
+              </span>
+            </div>
+            ` : ''}
+          </div>
+          ` : ''}
         </div>
         <div class="modal-footer">
           ${isEdit ? `<button class="btn-danger" onclick="window.todoApp.deleteTodo()">${t('deleteTodo')}</button>` : ''}

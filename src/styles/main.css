@@ -1451,3 +1451,847 @@ textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Filter row (holds view toggle + filter bar) */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px;
+  margin-bottom: 4px;
+}
+
+/* ============ Flow/Pipeline Styles ============ */
+
+/* Drag split zones */
+.todo-item {
+  position: relative;
+}
+
+.todo-item.drag-over-top {
+  border-top: 3px solid var(--accent);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.todo-item.drag-over-top::after {
+  content: attr(data-drag-top-label);
+  position: absolute;
+  top: -18px;
+  left: 8px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--bg-primary);
+  padding: 0 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.todo-item.drag-over-bottom {
+  border-bottom: 3px solid #3b82f6;
+  margin-bottom: 22px;
+  z-index: 10;
+}
+
+.todo-item.drag-over-bottom::after {
+  content: attr(data-drag-bottom-label);
+  position: absolute;
+  bottom: -20px;
+  left: 8px;
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 600;
+  background: var(--bg-primary);
+  padding: 2px 8px;
+  border-radius: 3px;
+  white-space: nowrap;
+  z-index: 20;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.todo-item.drag-over-top {
+  z-index: 10;
+}
+
+/* Flow badges */
+.flow-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.dependency-badge {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent);
+}
+
+.subtask-badge {
+  background: rgba(234, 179, 8, 0.1);
+  color: var(--warning, #EAB308);
+}
+
+.blocked-badge {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger, #EF4444);
+}
+
+/* Blocked todo item styling */
+.todo-item.blocked {
+  opacity: 0.75;
+}
+
+.todo-item.blocked .todo-status {
+  cursor: not-allowed;
+}
+
+/* Toast notification */
+.flow-toast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(31, 41, 55, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #f1f5f9;
+  padding: 10px 24px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 9999;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05);
+  pointer-events: none;
+  letter-spacing: 0.01em;
+}
+
+[data-theme="dark"] .flow-toast {
+  background: rgba(55, 65, 81, 0.9);
+  color: #e5e7eb;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08);
+}
+
+.flow-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* View toggle */
+.view-toggle {
+  display: flex;
+  gap: 0;
+  margin-right: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.view-btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-btn:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.view-btn.active {
+  background: var(--accent);
+  color: white;
+}
+
+.view-btn:hover:not(.active) {
+  background: var(--bg-hover);
+}
+
+/* Flow edit section in forms */
+.form-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.form-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.flow-edit-section {
+  margin-bottom: 10px;
+}
+
+.flow-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.flow-edit-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 60px;
+  font-weight: 500;
+}
+
+.flow-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.flow-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.flow-tag-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 50%;
+}
+
+.flow-tag-remove:hover {
+  color: var(--danger, #EF4444);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.flow-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.flow-add-select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  max-width: 200px;
+}
+
+.btn-small {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+
+.btn-small:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-danger-clear {
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid #EF4444;
+  background: transparent;
+  color: #EF4444;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
+.btn-danger-clear:hover {
+  background: #EF4444;
+  color: white;
+}
+
+/* Flow empty state */
+.flow-empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  margin-bottom: 12px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md, 8px);
+}
+
+.flow-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.flow-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.flow-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 360px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.flow-regular-list {
+  margin-top: 8px;
+}
+
+/* Flow groups in flow view */
+.flow-group {
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+}
+
+.flow-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.flow-group-icon {
+  font-size: 16px;
+}
+
+.flow-group-name {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.flow-group-count {
+  color: var(--text-muted);
+  font-size: 11px;
+  background: var(--bg-primary);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.flow-readonly-badge {
+  font-size: 11px;
+  color: #92400e;
+  background: #fef3c7;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid #fcd34d;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* ===== Flow Canvas (new unified canvas system) ===== */
+
+.flow-canvas-container {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle, #e5e7eb 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 12px 12px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: grab;
+}
+[data-theme="dark"] .flow-canvas-container {
+  background-image: radial-gradient(circle, #374151 1px, transparent 1px);
+}
+
+.flow-canvas-container:active {
+  cursor: grabbing;
+}
+
+.flow-canvas-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.flow-canvas-scene {
+  position: relative;
+  transform-origin: 0 0;
+  width: 100%;
+  height: 100%;
+}
+
+.flow-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  overflow: visible;
+}
+
+.flow-svg .flow-edge-dep {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* Hit area triggers hover on visible sibling */
+.flow-edge-hit:hover + .flow-edge-dep,
+.flow-edge-hit:hover + .flow-edge-parent {
+  stroke-width: 4;
+  opacity: 1;
+}
+.flow-edge-hit:hover + .flow-edge-dep {
+  stroke: #3b82f6;
+  filter: drop-shadow(0 2px 6px rgba(59,130,246,0.25));
+}
+.flow-edge-hit:hover + .flow-edge-parent {
+  opacity: 0.75;
+  stroke: #8b5cf6;
+}
+
+.flow-edge-dep {
+  stroke: #8ca0b8;
+  stroke-width: 2.5;
+  opacity: 0.6;
+  transition: stroke-width 0.2s, opacity 0.2s, stroke 0.2s;
+  fill: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.05));
+  pointer-events: none;
+}
+
+.flow-edge-parent {
+  stroke: #bcc4d0;
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  opacity: 0.4;
+  fill: none;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+/* Animated temporary line during handle drag */
+.flow-edge-temp {
+  stroke: #3b82f6;
+  stroke-width: 2.5;
+  stroke-dasharray: 8 4;
+  opacity: 0.8;
+  fill: none;
+  pointer-events: none;
+  animation: flow-dash-move 0.5s linear infinite;
+}
+
+@keyframes flow-dash-move {
+  to { stroke-dashoffset: -24; }
+}
+
+/* Edge being dragged (reassign or delete) */
+.flow-edge-dragging {
+  stroke: #f59e0b !important;
+  stroke-width: 4 !important;
+  opacity: 1 !important;
+  stroke-dasharray: 8 4;
+  animation: flow-dash-move 0.4s linear infinite;
+}
+
+/* Node snapping during edge reassign */
+.flow-node.edge-snap {
+  border-color: #3b82f6 !important;
+  border-style: solid !important;
+  box-shadow: 0 0 0 6px rgba(59,130,246,0.18), 0 4px 20px rgba(59,130,246,0.15) !important;
+  z-index: 5 !important;
+  animation: edge-snap-pulse 0.8s ease-in-out infinite;
+}
+@keyframes edge-snap-pulse {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(59,130,246,0.18), 0 4px 20px rgba(59,130,246,0.15); }
+  50% { box-shadow: 0 0 0 10px rgba(59,130,246,0.1), 0 4px 24px rgba(59,130,246,0.2); }
+}
+
+/* Invisible wide hit area for easy edge clicking */
+.flow-edge-hit {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* Preview line during edge reassign */
+.flow-edge-preview {
+  stroke: #3b82f6;
+  stroke-width: 3;
+  stroke-dasharray: 8 4;
+  opacity: 0.8;
+  pointer-events: none;
+  animation: flow-dash-move 0.6s linear infinite;
+  filter: drop-shadow(0 2px 8px rgba(59,130,246,0.4));
+}
+
+/* Edge animation – now on path elements */
+.flow-edge-dep {
+  transition: d 0.1s ease-out;
+  pointer-events: none;
+}
+
+.flow-edge-parent {
+  transition: d 0.1s ease-out;
+  pointer-events: none;
+}
+
+.flow-edge-parent {
+  stroke: #9ca3af;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+  fill: none;
+}
+
+.flow-nodes-layer {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.flow-nodes-layer > .flow-node {
+  pointer-events: auto;
+}
+
+/* Flow chart nodes */
+.flow-node {
+  position: absolute;
+  width: 200px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: grab;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  z-index: 2;
+  transition: left 0.12s ease-out, top 0.12s ease-out, box-shadow 0.2s, border-color 0.2s;
+  backdrop-filter: blur(4px);
+}
+[data-theme="dark"] .flow-node {
+  background: linear-gradient(135deg, #1f2937 0%, #1a1f2b 100%);
+  border-color: #374151;
+}
+
+.flow-node[dragging] {
+  transition: none !important;
+  z-index: 10;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  border-color: #3b82f6;
+}
+
+/* Disable edge animation during node drag for instant response */
+.flow-canvas-container:active .flow-edge-dep,
+.flow-canvas-container:active .flow-edge-parent {
+  transition: none !important;
+}
+
+.flow-node:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 16px rgba(59,130,246,0.12);
+  z-index: 5;
+}
+
+.flow-node:active {
+  cursor: grabbing;
+}
+
+.flow-node.completed {
+  opacity: 0.5;
+}
+.flow-node.completed .flow-node-name {
+  text-decoration: line-through;
+}
+.flow-node.blocked {
+  border-color: #fca5a5;
+}
+
+.flow-node.priority-urgent {
+  border-left: 3px solid #EF4444;
+}
+.flow-node.priority-high {
+  border-left: 3px solid #F97316;
+}
+.flow-node.priority-medium {
+  border-left: 3px solid #EAB308;
+}
+.flow-node.priority-low {
+  border-left: 3px solid #22C55E;
+}
+
+/* Subtask nodes – smaller, lighter */
+.flow-node.is-subtask {
+  width: 180px !important;
+  height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  border-style: dashed;
+  border-color: #d1d5db;
+  padding: 0 10px;
+  font-size: 11px;
+}
+[data-theme="dark"] .flow-node.is-subtask {
+  background: linear-gradient(135deg, #1a1d24 0%, #16181d 100%);
+  border-color: #4b5563;
+}
+
+.flow-node.drag-target {
+  border-color: #3b82f6 !important;
+  border-style: solid !important;
+  box-shadow: 0 0 0 4px rgba(59,130,246,0.2), 0 4px 16px rgba(59,130,246,0.15) !important;
+  z-index: 5 !important;
+}
+
+.flow-node-status {
+  font-size: 18px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.15s;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
+}
+.flow-node-status:hover {
+  transform: scale(1.3);
+}
+
+.flow-node-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+[data-theme="dark"] .flow-node-name {
+  color: #e5e7eb;
+}
+
+/* Read-only canvas nodes */
+.flow-node.readonly {
+  cursor: default;
+}
+.flow-node.readonly:hover {
+  border-color: #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+/* Read-only edges */
+.flow-edge-dep.readonly {
+  pointer-events: none;
+}
+
+.flow-node-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Connection handles (dots on node edges) */
+.flow-node-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #fff;
+  opacity: 0.5;
+  transition: opacity 0.15s, transform 0.15s;
+  cursor: crosshair;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+
+.flow-node:hover .flow-node-handle {
+  opacity: 0.9;
+}
+
+.flow-node-handle:hover {
+  transform: scale(1.6);
+  opacity: 1 !important;
+  background: #2563eb;
+}
+
+.flow-handle-left {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.flow-handle-left:hover {
+  transform: translateY(-50%) scale(1.6) !important;
+}
+
+.flow-handle-right {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.flow-handle-right:hover {
+  transform: translateY(-50%) scale(1.6) !important;
+}
+
+.flow-handle-bottom {
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.flow-handle-bottom:hover {
+  transform: translateX(-50%) scale(1.6) !important;
+}
+
+/* Flow chart controls (zoom buttons) */
+.flow-chart-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.flow-zoom-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
+.flow-zoom-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Flow todo list (below chart) */
+.flow-todo-list-header {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.flow-item-row {
+  cursor: grab;
+}
+
+.flow-item-row:active {
+  cursor: grabbing;
+}
+
+/* Flow help section in settings */
+.flow-help-section {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.flow-help-title {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  background: var(--bg-hover);
+  user-select: none;
+}
+.flow-help-title:hover {
+  background: var(--bg-secondary);
+}
+.flow-help-content {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  background: var(--bg-primary);
+}
+.flow-help-content p {
+  margin-bottom: 10px;
+}
+.flow-help-content ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.flow-help-content li {
+  margin-bottom: 6px;
+}
+.flow-help-content strong {
+  color: var(--text-primary);
+}
+
+/* Context menu for canvas */
+.flow-context-menu {
+  position: fixed;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 4px 0;
+  z-index: 10000;
+  min-width: 140px;
+}
+
+.flow-context-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.flow-context-item:hover {
+  background: var(--bg-hover);
+}
+
+.flow-group .todo-item {
+  margin-bottom: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.flow-group .todo-item:last-child {
+  border-bottom: none;
+}
+

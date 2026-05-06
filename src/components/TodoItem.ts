@@ -16,13 +16,22 @@ const STATUS_ICONS: Record<string, string> = {
   blocked: '⊘',
 };
 
+export interface FlowInfo {
+  predecessorCount: number;
+  subtaskCount: number;
+  isBlocked: boolean;
+  depth: number;
+}
+
 export function renderTodoItem(
   todo: Todo,
   isSelected: boolean,
   onSelect: () => void,
   onEdit: () => void,
   onToggleStatus: () => void,
-  onDelete: () => void
+  onDelete: () => void,
+  flowInfo?: FlowInfo,
+  showDragLabels: boolean = false
 ): string {
   const priorityColor = PRIORITY_COLORS[todo.priority] || PRIORITY_COLORS.medium;
   const statusIcon = STATUS_ICONS[todo.status] || STATUS_ICONS.pending;
@@ -46,9 +55,21 @@ export function renderTodoItem(
   const dailyBadge = todo.is_daily ? '<span class="daily-badge">🔄 Daily</span>' : '';
   const qlIcon = quickLaunch ? '🔗' : '';
 
+  // Flow badges
+  const flowBadges = flowInfo ? `
+    ${flowInfo.predecessorCount > 0 ? `<span class="flow-badge dependency-badge" title="${t('predecessors')}: ${flowInfo.predecessorCount}">⬆${flowInfo.predecessorCount}</span>` : ''}
+    ${flowInfo.subtaskCount > 0 ? `<span class="flow-badge subtask-badge" title="${t('subtasks')}: ${flowInfo.subtaskCount}">⬇${flowInfo.subtaskCount}</span>` : ''}
+    ${flowInfo.isBlocked ? `<span class="flow-badge blocked-badge" title="${t('blockedBy')}">⊘</span>` : ''}
+  ` : '';
+
+  const depthStyle = flowInfo && flowInfo.depth > 0 ? `margin-left: ${flowInfo.depth * 24}px;` : '';
+
   return `
-    <div class="todo-item ${isSelected ? 'selected' : ''} ${todo.status === 'completed' ? 'completed' : ''} priority-${todo.priority}"
-         data-id="${todo.id}"
+    <div class="todo-item ${isSelected ? 'selected' : ''} ${todo.status === 'completed' ? 'completed' : ''} priority-${todo.priority}${flowInfo?.isBlocked ? ' blocked' : ''}"
+         data-id="${todo.id}"${showDragLabels ? `
+         data-drag-top-label="${t('setAsPrerequisite')}"
+         data-drag-bottom-label="${t('setAsSuccessor')}"` : ''}
+         style="${depthStyle}"
          onclick="window.todoApp.selectTodo('${todo.id}')"
          ondblclick="window.todoApp.editTodo('${todo.id}')">
       <div class="todo-main">
@@ -62,6 +83,7 @@ export function renderTodoItem(
           <div class="todo-meta">
             ${dueDateDisplay ? `<span class="todo-due ${dueDateClass}">📅 ${dueDateDisplay}</span>` : ''}
             ${dailyBadge}
+            ${flowBadges}
             <span class="priority-label" style="color: ${priorityColor}">${priorityLabel[todo.priority] || t('priorityMedium')}</span>
           </div>
         </div>

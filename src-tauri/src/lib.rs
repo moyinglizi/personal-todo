@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{HashSet, VecDeque};
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -32,6 +33,7 @@ pub struct Todo {
     pub is_daily: bool,
     pub last_daily_reset: Option<String>,
     pub daily_time: Option<String>,
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +57,17 @@ pub struct Settings {
     pub shortcuts: String, // JSON string for shortcuts
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dependency {
+    pub id: String,
+    pub predecessor_id: String,
+    pub successor_id: String,
+    pub created_at: String,
+}
+
 fn init_database(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+    conn.execute("PRAGMA foreign_keys = ON;", [])?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS todos (
             id TEXT PRIMARY KEY,
@@ -97,6 +109,18 @@ fn init_database(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
         "CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS todo_dependencies (
+            id TEXT PRIMARY KEY,
+            predecessor_id TEXT NOT NULL,
+            successor_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (predecessor_id) REFERENCES todos(id) ON DELETE CASCADE,
+            FOREIGN KEY (successor_id) REFERENCES todos(id) ON DELETE CASCADE
         )",
         [],
     )?;
@@ -182,6 +206,7 @@ fn get_todos(db: State<DbState>) -> Result<Vec<Todo>, String> {
                 is_daily: row.get::<_, i32>(15)? == 1,
                 last_daily_reset: row.get(16)?,
                 daily_time: row.get(17)?,
+                parent_id: row.get(18)?,
             })
         })
         .map_err(|e| {
@@ -210,6 +235,7 @@ fn create_todo(
     is_daily: bool,
     status: String,
     daily_time: Option<String>,
+    parent_id: Option<String>,
 ) -> Result<Todo, String> {
     eprintln!("DEBUG create_todo called: name={}, is_daily={}", name, is_daily);
     let guard = db.0.lock().map_err(|e| e.to_string())?;
@@ -225,8 +251,8 @@ fn create_todo(
         .unwrap_or(0);
 
     conn.execute(
-        "INSERT INTO todos (id, name, created_at, updated_at, due_date, due_date_display, status, notes, quick_launch, reminders, tags, category_id, priority, is_daily, position, daily_time)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        "INSERT INTO todos (id, name, created_at, updated_at, due_date, due_date_display, status, notes, quick_launch, reminders, tags, category_id, priority, is_daily, position, daily_time, parent_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         rusqlite::params![
             id,
             name,
@@ -243,7 +269,8 @@ fn create_todo(
             priority,
             is_daily as i32,
             max_pos + 1,
-            daily_time
+            daily_time,
+            parent_id
         ],
     ).map_err(|e| {
         eprintln!("DEBUG create_todo ERROR: {}", e);
@@ -270,6 +297,7 @@ fn create_todo(
         is_daily,
         last_daily_reset: None,
         daily_time,
+        parent_id,
     })
 }
 
@@ -288,6 +316,7 @@ fn update_todo(
     priority: String,
     is_daily: bool,
     daily_time: Option<String>,
+    parent_id: Option<String>,
 ) -> Result<(), String> {
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
@@ -295,8 +324,8 @@ fn update_todo(
     let now = Utc::now().to_rfc3339();
 
     conn.execute(
-        "UPDATE todos SET name=?1, updated_at=?2, due_date=?3, due_date_display=?4, status=?5, notes=?6, quick_launch=?7, reminders=?8, category_id=?9, priority=?10, is_daily=?11, daily_time=?12 WHERE id=?13",
-        rusqlite::params![name, now, due_date, due_date_display, status, notes, quick_launch, reminders, category_id, priority, is_daily as i32, daily_time, id],
+        "UPDATE todos SET name=?1, updated_at=?2, due_date=?3, due_date_display=?4, status=?5, notes=?6, quick_launch=?7, reminders=?8, category_id=?9, priority=?10, is_daily=?11, daily_time=?12, parent_id=?13 WHERE id=?14",
+        rusqlite::params![name, now, due_date, due_date_display, status, notes, quick_launch, reminders, category_id, priority, is_daily as i32, daily_time, parent_id, id],
     )
     .map_err(|e| e.to_string())?;
 
@@ -311,6 +340,124 @@ fn delete_todo(db: State<DbState>, id: String) -> Result<(), String> {
     conn.execute("DELETE FROM todos WHERE id=?1", rusqlite::params![id])
         .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command]
+fn add_dependency(
+    db: State<DbState>,
+    predecessor_id: String,
+    successor_id: String,
+) -> Result<Dependency, String> {
+    if predecessor_id == successor_id {
+        return Err("A todo cannot depend on itself".to_string());
+    }
+
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+
+    // Circular dependency check: BFS from successor following predecessor links
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::new();
+    queue.push_back(successor_id.clone());
+    visited.insert(successor_id.clone());
+    while let Some(current) = queue.pop_front() {
+        let mut stmt = conn
+            .prepare("SELECT successor_id FROM todo_dependencies WHERE predecessor_id=?1")
+            .map_err(|e| e.to_string())?;
+        let ids: Vec<String> = stmt
+            .query_map(rusqlite::params![current], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for nid in ids {
+            if nid == predecessor_id {
+                return Err("Circular dependency detected".to_string());
+            }
+            if visited.insert(nid.clone()) {
+                queue.push_back(nid);
+            }
+        }
+    }
+
+    // Duplicate check
+    let exists: i32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM todo_dependencies WHERE predecessor_id=?1 AND successor_id=?2",
+            rusqlite::params![predecessor_id, successor_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if exists > 0 {
+        return Err("Dependency already exists".to_string());
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO todo_dependencies (id, predecessor_id, successor_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![id, predecessor_id, successor_id, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(Dependency {
+        id,
+        predecessor_id,
+        successor_id,
+        created_at: now,
+    })
+}
+
+#[tauri::command]
+fn remove_dependency(db: State<DbState>, id: String) -> Result<(), String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    conn.execute(
+        "DELETE FROM todo_dependencies WHERE id=?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_dependencies(db: State<DbState>) -> Result<Vec<Dependency>, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    let mut stmt = conn
+        .prepare("SELECT * FROM todo_dependencies")
+        .map_err(|e| e.to_string())?;
+    let deps = stmt
+        .query_map([], |row| {
+            Ok(Dependency {
+                id: row.get(0)?,
+                predecessor_id: row.get(1)?,
+                successor_id: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    deps.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_parent(
+    db: State<DbState>,
+    todo_id: String,
+    parent_id: Option<String>,
+) -> Result<(), String> {
+    if let Some(ref pid) = parent_id {
+        if *pid == todo_id {
+            return Err("A todo cannot be its own parent".to_string());
+        }
+    }
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    conn.execute(
+        "UPDATE todos SET parent_id=?1 WHERE id=?2",
+        rusqlite::params![parent_id, todo_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -700,6 +847,15 @@ pub fn run() {
             eprintln!("DEBUG: failed to add daily_time column: {}", e);
         }
     }
+    // Add parent_id column if it doesn't exist (for subtask hierarchy)
+    let has_parent_id: i32 = conn
+        .query_row("SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='parent_id'", [], |row| row.get(0))
+        .unwrap_or(0);
+    if has_parent_id == 0 {
+        if let Err(e) = conn.execute("ALTER TABLE todos ADD COLUMN parent_id TEXT", []) {
+            eprintln!("DEBUG: failed to add parent_id column: {}", e);
+        }
+    }
 
     let db_state = DbState(Mutex::new(Some(conn)));
 
@@ -726,6 +882,10 @@ pub fn run() {
             launch_url,
             set_auto_start,
             get_auto_start,
+            add_dependency,
+            remove_dependency,
+            get_dependencies,
+            set_parent,
         ])
         .setup(|app| {
             setup_tray(app.handle())?;
