@@ -35,12 +35,23 @@ export interface Reminder {
   triggered: boolean;
 }
 
+export interface Shortcuts {
+  openQuickAdd: string;    // 默认 'n'
+  focusSearch: string;     // 默认 '/'
+  navigateDown: string;     // 默认 'j'
+  navigateUp: string;       // 默认 'k'
+  save: string;             // 默认 'Enter'
+  close: string;            // 默认 'Escape'
+  [key: string]: string;
+}
+
 export interface Settings {
   hotkey: string;
   theme: 'light' | 'dark';
   language: 'en' | 'zh';
   auto_start: boolean;
   category_count_mode: 'total' | 'uncompleted' | 'completed';
+  shortcuts: Shortcuts;
 }
 
 export type FilterStatus = 'all' | 'pending' | 'in_progress' | 'completed' | 'blocked';

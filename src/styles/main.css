@@ -1366,6 +1366,48 @@ body {
   color: var(--text-primary);
 }
 
+/* Shortcuts Grid */
+.shortcuts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcut-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.shortcut-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.shortcut-input {
+  width: 80px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.shortcut-input:hover {
+  border-color: var(--accent);
+}
+
+.shortcut-input.capturing {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
 .checkbox-label input[type="checkbox"] {
   width: 16px;
   height: 16px;

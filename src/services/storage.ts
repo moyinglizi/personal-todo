@@ -94,7 +94,14 @@ export async function reorderCategories(sourceId: string, targetId: string): Pro
 
 // Settings operations
 export async function getSettings(): Promise<Settings> {
-  return await invoke('get_settings');
+  const settings = await invoke<Settings>('get_settings');
+  // Parse shortcuts JSON string into object
+  try {
+    settings.shortcuts = JSON.parse((settings as any).shortcuts || '{}');
+  } catch {
+    settings.shortcuts = { openQuickAdd: 'n', focusSearch: '/', navigateDown: 'j', navigateUp: 'k', save: 'Enter', close: 'Escape' };
+  }
+  return settings;
 }
 
 export async function updateSettings(
@@ -102,9 +109,10 @@ export async function updateSettings(
   theme: string,
   language: string,
   autoStart: boolean,
-  categoryCountMode: string
+  categoryCountMode: string,
+  shortcuts: string
 ): Promise<void> {
-  return await invoke('update_settings', { hotkey, theme, language, autoStart, categoryCountMode });
+  return await invoke('update_settings', { hotkey, theme, language, autoStart, categoryCountMode, shortcuts });
 }
 
 // Auto start operations

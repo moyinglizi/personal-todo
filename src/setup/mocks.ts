@@ -40,6 +40,7 @@ export const createMockSettings = (overrides: Partial<Settings> = {}): Settings 
   language: "zh",
   auto_start: false,
   category_count_mode: "uncompleted",
+  shortcuts: { openQuickAdd: 'n', focusSearch: '/', navigateDown: 'j', navigateUp: 'k', save: 'Enter', close: 'Escape' },
   ...overrides,
 });
 

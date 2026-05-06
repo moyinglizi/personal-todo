@@ -135,8 +135,9 @@ describe('storage service (invoke wrappers)', () => {
 
   describe('updateSettings', () => {
     it('should update settings without error', async () => {
+      const shortcuts = JSON.stringify({ openQuickAdd: 'n', focusSearch: '/', navigateDown: 'j', navigateUp: 'k', save: 'Enter', close: 'Escape' });
       await expect(
-        storage.updateSettings("Ctrl+Shift+T", "dark", "en", true, "total")
+        storage.updateSettings("Ctrl+Shift+T", "dark", "en", true, "total", shortcuts)
       ).resolves.not.toThrow();
     });
   });

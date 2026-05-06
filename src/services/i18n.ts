@@ -72,6 +72,16 @@ export interface Translations {
   categoryCountModeCompleted: string;
   language: string;
 
+  // Shortcuts
+  shortcuts: string;
+  shortcutOpenQuickAdd: string;
+  shortcutFocusSearch: string;
+  shortcutNavigateDown: string;
+  shortcutNavigateUp: string;
+  shortcutSave: string;
+  shortcutClose: string;
+  pressAnyKey: string;
+
   // Status
   statusPending: string;
   statusInProgress: string;
@@ -198,6 +208,15 @@ const translations: Record<Language, Translations> = {
     categoryCountModeCompleted: 'Show completed count',
     language: 'Language',
 
+    shortcuts: 'Keyboard Shortcuts',
+    shortcutOpenQuickAdd: 'Open Quick Add',
+    shortcutFocusSearch: 'Focus Search',
+    shortcutNavigateDown: 'Navigate Down',
+    shortcutNavigateUp: 'Navigate Up',
+    shortcutSave: 'Save / Confirm',
+    shortcutClose: 'Close Modal',
+    pressAnyKey: 'Press any key...',
+
     statusPending: 'Pending',
     statusInProgress: 'In Progress',
     statusCompleted: 'Completed',
@@ -315,6 +334,15 @@ const translations: Record<Language, Translations> = {
     categoryCountModeUncompleted: '显示未完成数',
     categoryCountModeCompleted: '显示已完成数',
     language: '语言',
+
+    shortcuts: '键盘快捷键',
+    shortcutOpenQuickAdd: '打开快速添加',
+    shortcutFocusSearch: '聚焦搜索框',
+    shortcutNavigateDown: '下移选择',
+    shortcutNavigateUp: '上移选择',
+    shortcutSave: '保存/确认',
+    shortcutClose: '关闭弹窗',
+    pressAnyKey: '按下任意键...',
 
     statusPending: '待处理',
     statusInProgress: '进行中',

@@ -102,6 +102,7 @@ export function renderSettingsModal(
   language: string,
   autoStart: boolean,
   categoryCountMode: string,
+  shortcuts: Record<string, string>,
   onSave: () => void
 ): string {
   return `
@@ -145,7 +146,36 @@ export function renderSettingsModal(
               <option value="completed" ${categoryCountMode === 'completed' ? 'selected' : ''}>${t('categoryCountModeCompleted')}</option>
             </select>
           </div>
-          <div class="form-group">
+
+          <h3 style="margin: 20px 0 10px; font-size: 14px; color: var(--text-secondary);">${t('shortcuts')}</h3>
+          <div class="shortcuts-grid">
+            <div class="shortcut-item">
+              <span class="shortcut-label">${t('shortcutOpenQuickAdd')}</span>
+              <input type="text" class="shortcut-input" data-shortcut="openQuickAdd" value="${shortcuts.openQuickAdd || 'n'}" readonly onclick="window.todoApp.startCaptureShortcut(this)" />
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">${t('shortcutFocusSearch')}</span>
+              <input type="text" class="shortcut-input" data-shortcut="focusSearch" value="${shortcuts.focusSearch || '/'}" readonly onclick="window.todoApp.startCaptureShortcut(this)" />
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">${t('shortcutNavigateDown')}</span>
+              <input type="text" class="shortcut-input" data-shortcut="navigateDown" value="${shortcuts.navigateDown || 'j'}" readonly onclick="window.todoApp.startCaptureShortcut(this)" />
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">${t('shortcutNavigateUp')}</span>
+              <input type="text" class="shortcut-input" data-shortcut="navigateUp" value="${shortcuts.navigateUp || 'k'}" readonly onclick="window.todoApp.startCaptureShortcut(this)" />
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">${t('shortcutSave')}</span>
+              <input type="text" class="shortcut-input" data-shortcut="save" value="${shortcuts.save || 'Enter'}" readonly onclick="window.todoApp.startCaptureShortcut(this)" />
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">${t('shortcutClose')}</span>
+              <input type="text" class="shortcut-input" data-shortcut="close" value="${shortcuts.close || 'Escape'}" readonly onclick="window.todoApp.startCaptureShortcut(this)" />
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 20px;">
             <button class="btn-secondary" onclick="window.todoApp.resetDailyTodos()">
               🔄 ${t('resetAllDaily')}
             </button>

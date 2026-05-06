@@ -1,4 +1,4 @@
-import type { Todo, Category, Settings, FilterStatus, SortBy, AppState } from './types';
+import type { Todo, Category, Settings, Shortcuts, FilterStatus, SortBy, AppState } from './types';
 import { getTodos, createTodo, updateTodo, deleteTodo, getCategories, getSettings, updateSettings, resetDailyTodos as apiResetDaily, createCategory, updateCategory, deleteCategory, reorderCategories, openPath, stringifyReminders, setAutoStart } from './services/storage';
 import { parseFlexibleDate } from './services/parser';
 import { reminderScheduler } from './services/reminder';
@@ -18,7 +18,14 @@ class TodoApp {
   private state: AppState = {
     todos: [],
     categories: [],
-    settings: { hotkey: 'Ctrl+Shift+T', theme: 'light', language: 'zh' as Language, auto_start: false, category_count_mode: 'uncompleted' as const },
+    settings: {
+      hotkey: 'Ctrl+Shift+T',
+      theme: 'light',
+      language: 'zh' as Language,
+      auto_start: false,
+      category_count_mode: 'uncompleted' as const,
+      shortcuts: { openQuickAdd: 'n', focusSearch: '/', navigateDown: 'j', navigateUp: 'k', save: 'Enter', close: 'Escape' }
+    },
     filterStatus: 'all',
     filterCategory: null,
     sortBy: 'position',
@@ -61,7 +68,14 @@ class TodoApp {
       this.state.todos = await getTodos();
       this.state.todos = checkDailyReset(this.state.todos);
       this.state.categories = await getCategories();
-      this.state.settings = await getSettings();
+      const settings = await getSettings();
+      // shortcuts is already parsed by storage.getSettings
+      this.state.settings.shortcuts = settings.shortcuts;
+      this.state.settings.hotkey = settings.hotkey;
+      this.state.settings.theme = settings.theme as 'light' | 'dark';
+      this.state.settings.language = settings.language as 'en' | 'zh';
+      this.state.settings.auto_start = settings.auto_start;
+      this.state.settings.category_count_mode = settings.category_count_mode as 'total' | 'uncompleted' | 'completed';
     } catch (error) {
       console.error('Failed to load data:', error);
       this.state.todos = [];
@@ -78,9 +92,25 @@ class TodoApp {
   }
 
   private setupKeyboardShortcuts() {
+    const shortcuts = this.state.settings.shortcuts;
+
     document.addEventListener('keydown', (e) => {
-      // Escape to close modals
-      if (e.key === 'Escape') {
+      // Check if capturing shortcut
+      const capturingInput = document.querySelector('.shortcut-input.capturing') as HTMLInputElement;
+      if (capturingInput) {
+        e.preventDefault();
+        e.stopPropagation();
+        const key = this.formatKey(e);
+        capturingInput.value = key;
+        capturingInput.classList.remove('capturing');
+        capturingInput.blur();
+        return;
+      }
+
+      const sc = this.state.settings.shortcuts;
+
+      // Close shortcut
+      if (e.key === sc.close) {
         if (this.state.isQuickAddOpen) {
           this.closeQuickAdd();
         } else if (this.state.editingTodo !== null) {
@@ -93,33 +123,33 @@ class TodoApp {
         this.closeContextMenu();
       }
 
-      // n to open quick add (when not in input)
-      if (e.key === 'n' && !this.isInputFocused()) {
+      // Open quick add (when not in input)
+      if (e.key === sc.openQuickAdd && !this.isInputFocused()) {
         e.preventDefault();
         this.openQuickAdd();
       }
 
-      // / or Ctrl+F to focus search
-      if ((e.key === '/' || (e.ctrlKey && e.key === 'f')) && !this.state.isQuickAddOpen && this.state.editingTodo === null) {
+      // Focus search
+      if ((e.key === sc.focusSearch || (e.ctrlKey && e.key === 'f')) && !this.state.isQuickAddOpen && this.state.editingTodo === null) {
         e.preventDefault();
         const searchInput = document.getElementById('search-input') as HTMLInputElement;
         searchInput?.focus();
       }
 
-      // j/k to navigate
+      // Navigate
       if (!this.isInputFocused() && !this.state.isQuickAddOpen && this.state.editingTodo === null) {
-        if (e.key === 'j' || e.key === 'ArrowDown') {
+        if (e.key === sc.navigateDown || e.key === 'ArrowDown') {
           e.preventDefault();
           this.navigateDown();
         }
-        if (e.key === 'k' || e.key === 'ArrowUp') {
+        if (e.key === sc.navigateUp || e.key === 'ArrowUp') {
           e.preventDefault();
           this.navigateUp();
         }
       }
 
-      // Enter to save (when quick add or modal is open and not in input)
-      if (e.key === 'Enter' && !this.isInputFocused()) {
+      // Save (when quick add or modal is open and not in input)
+      if (e.key === sc.save && !this.isInputFocused()) {
         if (this.state.isQuickAddOpen) {
           this.quickAdd();
         } else if (this.state.editingTodo !== null) {
@@ -135,6 +165,25 @@ class TodoApp {
         }
       }
     });
+  }
+
+  private formatKey(e: KeyboardEvent): string {
+    const parts: string[] = [];
+    if (e.ctrlKey) parts.push('Ctrl');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.altKey) parts.push('Alt');
+    if (e.metaKey) parts.push('Meta');
+    const key = e.key;
+    if (key !== 'Control' && key !== 'Shift' && key !== 'Alt' && key !== 'Meta') {
+      parts.push(key.length === 1 ? key.toUpperCase() : key);
+    }
+    return parts.join('+');
+  }
+
+  startCaptureShortcut(input: HTMLInputElement) {
+    input.classList.add('capturing');
+    input.value = t('pressAnyKey');
+    input.focus();
   }
 
   private isInputFocused(): boolean {
@@ -324,6 +373,7 @@ class TodoApp {
         this.state.settings.language,
         this.state.settings.auto_start,
         this.state.settings.category_count_mode,
+        this.state.settings.shortcuts,
         () => this.saveSettings()
       ) : ''}
       ${this.state.isConfirmOpen ? renderConfirmModal(
@@ -911,23 +961,27 @@ class TodoApp {
     const autoStartCheckbox = document.getElementById('settings-auto-start') as HTMLInputElement;
     const categoryCountModeSelect = document.getElementById('settings-category-count-mode') as HTMLSelectElement;
 
-    console.log('saveSettings called', { hotkeyInput, themeSelect, languageSelect, categoryCountModeSelect });
-
     if (!hotkeyInput || !themeSelect || !languageSelect || !categoryCountModeSelect) {
-      console.log('Missing elements, returning early');
       return;
     }
+
+    // Get shortcuts from UI
+    const shortcutInputs = document.querySelectorAll('.shortcut-input');
+    const shortcuts: Shortcuts = { openQuickAdd: 'n', focusSearch: '/', navigateDown: 'j', navigateUp: 'k', save: 'Enter', close: 'Escape' };
+    shortcutInputs.forEach((input) => {
+      const el = input as HTMLInputElement;
+      const key = el.dataset.shortcut as keyof Shortcuts;
+      if (key && key in shortcuts) {
+        shortcuts[key] = el.value;
+      }
+    });
 
     const newLanguage = languageSelect.value as Language;
     const newAutoStart = autoStartCheckbox.checked;
     const newCategoryCountMode = categoryCountModeSelect.value as 'total' | 'uncompleted' | 'completed';
 
-    console.log('Saving settings:', { hotkey: hotkeyInput.value, theme: themeSelect.value, language: newLanguage, autoStart: newAutoStart, categoryCountMode: newCategoryCountMode });
-
     try {
-      console.log('Calling updateSettings...');
-      await updateSettings(hotkeyInput.value, themeSelect.value, newLanguage, newAutoStart, newCategoryCountMode);
-      console.log('updateSettings completed');
+      await updateSettings(hotkeyInput.value, themeSelect.value, newLanguage, newAutoStart, newCategoryCountMode, JSON.stringify(shortcuts));
       await setAutoStart(newAutoStart);
 
       this.state.settings.hotkey = hotkeyInput.value;
@@ -935,6 +989,7 @@ class TodoApp {
       this.state.settings.language = newLanguage;
       this.state.settings.auto_start = newAutoStart;
       this.state.settings.category_count_mode = newCategoryCountMode;
+      this.state.settings.shortcuts = shortcuts;
 
       setLanguage(newLanguage);
       this.applyTheme();
@@ -949,7 +1004,7 @@ class TodoApp {
   async toggleTheme() {
     const newTheme = this.state.settings.theme === 'light' ? 'dark' : 'light';
     try {
-      await updateSettings(this.state.settings.hotkey, newTheme, this.state.settings.language, this.state.settings.auto_start, this.state.settings.category_count_mode);
+      await updateSettings(this.state.settings.hotkey, newTheme, this.state.settings.language, this.state.settings.auto_start, this.state.settings.category_count_mode, JSON.stringify(this.state.settings.shortcuts));
       this.state.settings.theme = newTheme;
       this.applyTheme();
       this.render();
@@ -961,7 +1016,7 @@ class TodoApp {
   async toggleLanguage() {
     const newLanguage = this.state.settings.language === 'zh' ? 'en' : 'zh';
     try {
-      await updateSettings(this.state.settings.hotkey, this.state.settings.theme, newLanguage, this.state.settings.auto_start, this.state.settings.category_count_mode);
+      await updateSettings(this.state.settings.hotkey, this.state.settings.theme, newLanguage, this.state.settings.auto_start, this.state.settings.category_count_mode, JSON.stringify(this.state.settings.shortcuts));
       this.state.settings.language = newLanguage;
       setLanguage(newLanguage);
       this.render();

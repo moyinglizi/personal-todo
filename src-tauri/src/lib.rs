@@ -52,6 +52,7 @@ pub struct Settings {
     pub language: String,
     pub auto_start: bool,
     pub category_count_mode: String,
+    pub shortcuts: String, // JSON string for shortcuts
 }
 
 fn init_database(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
@@ -134,6 +135,10 @@ fn init_database(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
     )?;
     conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('category_count_mode', 'uncompleted')",
+        [],
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcuts', '{\"openQuickAdd\":\"n\",\"focusSearch\":\"/\",\"navigateDown\":\"j\",\"navigateUp\":\"k\",\"save\":\"Enter\",\"close\":\"Escape\"}')",
         [],
     )?;
 
@@ -474,18 +479,25 @@ fn get_settings(db: State<DbState>) -> Result<Settings, String> {
         })
         .unwrap_or_else(|_| "uncompleted".to_string());
 
+    let shortcuts: String = conn
+        .query_row("SELECT value FROM settings WHERE key='shortcuts'", [], |row| {
+            row.get(0)
+        })
+        .unwrap_or_else(|_| "{\"openQuickAdd\":\"n\",\"focusSearch\":\"/\",\"navigateDown\":\"j\",\"navigateUp\":\"k\",\"save\":\"Enter\",\"close\":\"Escape\"}".to_string());
+
     Ok(Settings {
         hotkey,
         theme,
         language,
         auto_start: auto_start == "true",
         category_count_mode,
+        shortcuts,
     })
 }
 
 #[tauri::command]
-fn update_settings(db: State<DbState>, hotkey: String, theme: String, language: String, auto_start: bool, category_count_mode: String) -> Result<(), String> {
-    eprintln!("DEBUG update_settings called with: hotkey={}, theme={}, language={}, auto_start={}, category_count_mode={}", hotkey, theme, language, auto_start, category_count_mode);
+fn update_settings(db: State<DbState>, hotkey: String, theme: String, language: String, auto_start: bool, category_count_mode: String, shortcuts: String) -> Result<(), String> {
+    eprintln!("DEBUG update_settings called with: hotkey={}, theme={}, language={}, auto_start={}, category_count_mode={}, shortcuts={}", hotkey, theme, language, auto_start, category_count_mode, shortcuts);
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
 
@@ -516,6 +528,12 @@ fn update_settings(db: State<DbState>, hotkey: String, theme: String, language: 
     conn.execute(
         "INSERT OR REPLACE INTO settings (key, value) VALUES ('category_count_mode', ?1)",
         rusqlite::params![category_count_mode],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('shortcuts', ?1)",
+        rusqlite::params![shortcuts],
     )
     .map_err(|e| e.to_string())?;
 

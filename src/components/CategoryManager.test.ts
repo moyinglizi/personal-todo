@@ -175,48 +175,50 @@ describe('CategoryManager', () => {
   });
 
   describe('renderSettingsModal', () => {
+    const mockShortcuts = { openQuickAdd: 'n', focusSearch: '/', navigateDown: 'j', navigateUp: 'k', save: 'Enter', close: 'Escape' };
+
     it('should render settings modal', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', mockShortcuts, () => {});
       expect(html).toContain(t('settings'));
     });
 
     it('should render hotkey input', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', mockShortcuts, () => {});
       expect(html).toContain('settings-hotkey');
       expect(html).toContain('Ctrl+Shift+T');
     });
 
     it('should render theme dropdown', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'dark', 'zh', false, 'uncompleted', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'dark', 'zh', false, 'uncompleted', mockShortcuts, () => {});
       expect(html).toContain('settings-theme');
       expect(html).toContain('dark');
     });
 
     it('should render language dropdown', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'en', false, 'uncompleted', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'en', false, 'uncompleted', mockShortcuts, () => {});
       expect(html).toContain('settings-language');
       expect(html).toContain('English');
     });
 
     it('should render auto start checkbox', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', true, 'uncompleted', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', true, 'uncompleted', mockShortcuts, () => {});
       expect(html).toContain('settings-auto-start');
       expect(html).toContain('checked');
     });
 
     it('should render category count mode dropdown', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'total', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'total', mockShortcuts, () => {});
       expect(html).toContain('settings-category-count-mode');
       expect(html).toContain('total');
     });
 
     it('should render reset daily todos button', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', mockShortcuts, () => {});
       expect(html).toContain(t('resetAllDaily'));
     });
 
     it('should have save and cancel buttons', () => {
-      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', () => {});
+      const html = renderSettingsModal('Ctrl+Shift+T', 'light', 'zh', false, 'uncompleted', mockShortcuts, () => {});
       expect(html).toContain('btn-primary');
       expect(html).toContain('btn-secondary');
     });
