@@ -240,6 +240,11 @@ export function renderFlowCanvas(
            onclick="window.todoApp.selectTodo('${n.id}')"
            oncontextmenu="window.todoApp.flowCanvasNodeContext(event,'${n.id}',${flowIndex})"
            onmousedown="window.todoApp.flowCanvasNodeDown(event,'${n.id}',${flowIndex})"`;
+    const dragHandle = (!readOnly && !isSub) ? `
+        <div class="flow-node-drag-handle"
+             onmousedown="event.stopPropagation();window.todoApp.flowNodeDragStart(event,'${n.id}',${flowIndex})"
+             title="${t('dragToCategory')}">⠿</div>
+        ` : '';
     const handles = (!readOnly && !isSub) ? `
         <span class="flow-node-handle flow-handle-right"
               onmousedown="event.stopPropagation();window.todoApp.flowCanvasHandleDown(event,'${n.id}','right',${flowIndex})" title="${t('successors')}"></span>
@@ -252,6 +257,7 @@ export function renderFlowCanvas(
       <div class="flow-node ${todo.status} ${isSub?'is-subtask':''} ${readOnly?'readonly':''}"
            data-todo-id="${n.id}" data-flow-index="${flowIndex}"
            style="left:${n.x}px;top:${n.y}px;width:${isSub?180:200}px;" ${nodeActions}>
+        ${dragHandle}
         <span class="flow-node-status" style="color:${pc(todo.priority)}"
               onclick="event.stopPropagation();window.todoApp.toggleStatus('${n.id}')"
               ondblclick="event.stopPropagation()"

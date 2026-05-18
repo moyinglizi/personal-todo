@@ -283,6 +283,26 @@ body {
   cursor: pointer;
 }
 
+.sort-order-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sort-order-btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
 /* Todo List */
 .todo-list {
   flex: 1;
@@ -2173,6 +2193,32 @@ textarea:focus-visible {
 }
 .flow-handle-bottom:hover {
   transform: translateX(-50%) scale(1.6) !important;
+}
+
+.flow-node-drag-handle {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  cursor: grab;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.flow-node:hover .flow-node-drag-handle {
+  opacity: 0.5;
+}
+
+.flow-node-drag-handle:hover {
+  opacity: 1 !important;
+  transform: translateX(-50%) scale(1.2);
 }
 
 /* Flow chart controls (zoom buttons) */

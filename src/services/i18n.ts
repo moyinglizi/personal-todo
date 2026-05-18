@@ -135,8 +135,11 @@ export interface Translations {
   noDueDate: string;
   searchPlaceholder: string;
   sortBy: string;
+  sortAsc: string;
+  sortDesc: string;
   position: string;
   createdAt: string;
+  dragToCategory: string;
   dropToDelete: string;
 
   // Flow / Pipeline
@@ -323,8 +326,11 @@ const translations: Record<Language, Translations> = {
     noDueDate: 'No due date',
     searchPlaceholder: 'Search todos...',
     sortBy: 'Sort',
+    sortAsc: 'Asc',
+    sortDesc: 'Desc',
     position: 'Position',
     createdAt: 'Created',
+    dragToCategory: 'Drag to change category',
     dropToDelete: 'Drop here to delete',
 
     // Flow / Pipeline
@@ -507,8 +513,11 @@ const translations: Record<Language, Translations> = {
     noDueDate: '无截止日期',
     searchPlaceholder: '搜索待办...',
     sortBy: '排序',
+    sortAsc: '正序',
+    sortDesc: '反序',
     position: '位置',
     createdAt: '创建时间',
+    dragToCategory: '拖动以修改分类',
     dropToDelete: '拖放到此处删除',
 
     // Flow / Pipeline

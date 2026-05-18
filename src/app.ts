@@ -324,8 +324,10 @@ class TodoApp {
             ${renderFilterBar(
               this.state.filterStatus,
               this.state.sortBy,
+              this.state.sortOrder,
               (s) => this.setFilter(s),
-              (s) => this.setSort(s)
+              (s) => this.setSort(s),
+              () => this.toggleSortOrder()
             )}
           </div>
           <div class="todo-list">
@@ -557,6 +559,11 @@ class TodoApp {
   setSort(sort: SortBy) {
     this.state.sortBy = sort;
     this.applyCompletedSort();
+    this.render();
+  }
+
+  toggleSortOrder() {
+    this.state.sortOrder = this.state.sortOrder === 'asc' ? 'desc' : 'asc';
     this.render();
   }
 
@@ -978,12 +985,6 @@ class TodoApp {
     const currentIndex = statusOrder.indexOf(todo.status);
     const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
 
-    const { allowed, reason } = this.canSetStatus(id, nextStatus);
-    if (!allowed) {
-      this.showToast(reason);
-      return;
-    }
-
     try {
       await updateTodo(
         todo.id,
@@ -1010,12 +1011,6 @@ class TodoApp {
   async setTodoStatus(id: string, status: string) {
     const todo = this.state.todos.find(t => t.id === id);
     if (!todo) return;
-
-    const { allowed, reason } = this.canSetStatus(id, status);
-    if (!allowed) {
-      this.showToast(reason);
-      return;
-    }
 
     try {
       await updateTodo(
@@ -2442,13 +2437,6 @@ class TodoApp {
       return;
     }
 
-    const { allowed, reason } = this.canSetStatus(todoId, status);
-    if (!allowed) {
-      this.showToast(reason);
-      this.clearDragState();
-      return;
-    }
-
     try {
       await updateTodo(
         todo.id, todo.name, todo.due_date, todo.due_date_display, status,
@@ -2461,6 +2449,170 @@ class TodoApp {
       console.error('Failed to update todo status:', err);
     }
 
+    this.clearDragState();
+  }
+
+  // Flow node drag (for category/status drop)
+  flowNodeDragStart(event: MouseEvent, todoId: string, flowIndex: number) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const nodeEl = document.querySelector(`.flow-node[data-todo-id="${todoId}"][data-flow-index="${flowIndex}"]`) as HTMLElement;
+    if (!nodeEl) return;
+
+    // Check if already outside canvas
+    const canvasContainer = nodeEl.closest('.flow-canvas-container') as HTMLElement;
+    const rect = canvasContainer?.getBoundingClientRect();
+    if (rect && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) {
+      this.flowNodeDragOutOfCanvas(event, todoId);
+      return;
+    }
+
+    // Start drag: show ghost + status panel
+    this.state.draggingTodoId = todoId;
+    this.dragGhost = nodeEl.cloneNode(true) as HTMLElement;
+    this.dragGhost.style.position = 'fixed';
+    this.dragGhost.style.pointerEvents = 'none';
+    this.dragGhost.style.opacity = '0.85';
+    this.dragGhost.style.zIndex = '9999';
+    this.dragGhost.style.width = (nodeEl.offsetWidth * 0.6) + 'px';
+    this.dragGhost.style.left = event.clientX - (nodeEl.offsetWidth * 0.3) + 'px';
+    this.dragGhost.style.top = event.clientY - 10 + 'px';
+    this.dragGhost.style.transform = 'rotate(3deg)';
+    this.dragGhost.style.boxShadow = '0 12px 40px rgba(0,0,0,0.35)';
+    this.dragGhost.style.borderRadius = '8px';
+    document.body.appendChild(this.dragGhost);
+
+    // Show status panel
+    const statusPanel = document.querySelector('.drag-status-panel') as HTMLElement;
+    if (statusPanel) statusPanel.classList.add('active');
+
+    document.addEventListener('mousemove', this.flowNodeDragMove);
+    document.addEventListener('mouseup', this.flowNodeDragUp);
+  }
+
+  flowNodeDragMove = (event: MouseEvent) => {
+    if (!this.dragGhost || !this.state.draggingTodoId) return;
+
+    this.dragGhost.style.left = event.clientX - 50 + 'px';
+    this.dragGhost.style.top = event.clientY - 10 + 'px';
+
+    // Check category
+    const dropTarget = document.elementFromPoint(event.clientX, event.clientY);
+    document.querySelectorAll('.category-item').forEach(cat => cat.classList.remove('drag-over'));
+    const categoryItem = dropTarget?.closest('.category-item');
+    if (categoryItem) categoryItem.classList.add('drag-over');
+
+    // Check status panel
+    document.querySelectorAll('.drag-status-item').forEach(el => el.classList.remove('drag-over'));
+    const statusItem = dropTarget?.closest('.drag-status-item');
+    if (statusItem) statusItem.classList.add('drag-over');
+  };
+
+  flowNodeDragUp = async (event: MouseEvent) => {
+    document.removeEventListener('mousemove', this.flowNodeDragMove);
+    document.removeEventListener('mouseup', this.flowNodeDragUp);
+
+    const todoId = this.state.draggingTodoId;
+    if (!todoId) return;
+
+    // Remove ghost
+    if (this.dragGhost) {
+      this.dragGhost.remove();
+      this.dragGhost = null;
+    }
+
+    // Clear highlights
+    document.querySelectorAll('.category-item').forEach(cat => cat.classList.remove('drag-over'));
+    document.querySelectorAll('.drag-status-item').forEach(el => el.classList.remove('drag-over'));
+
+    // Find drop target first
+    const dropTarget = document.elementFromPoint(event.clientX, event.clientY);
+    const todo = this.state.todos.find(t => t.id === todoId);
+    if (!todo) { this.clearDragState(); return; }
+
+    // Check if dropped on a category item (works even inside canvas)
+    const categoryItem = dropTarget?.closest('.category-item');
+    if (categoryItem) {
+      const categoryId = categoryItem.getAttribute('data-category-id');
+      if (categoryId && categoryId !== 'daily') {
+        try {
+          await updateTodo(
+            todo.id, todo.name, todo.due_date, todo.due_date_display, todo.status,
+            todo.notes, todo.quick_launch, todo.reminders, categoryId === 'all' ? null : categoryId,
+            todo.priority, todo.is_daily, todo.parent_id
+          );
+          this.state.todos = await getTodos();
+          this.render();
+        } catch (err) { console.error('Failed to update category:', err); }
+      }
+      this.clearDragState();
+      return;
+    }
+
+    // Check if dropped on a status item (works even inside canvas)
+    const statusItem = dropTarget?.closest('.drag-status-item');
+    if (statusItem) {
+      const status = statusItem.getAttribute('data-status');
+      if (status) {
+        try {
+          await updateTodo(
+            todo.id, todo.name, todo.due_date, todo.due_date_display, status,
+            todo.notes, todo.quick_launch, todo.reminders, todo.category_id,
+            todo.priority, todo.is_daily, todo.parent_id
+          );
+          this.state.todos = await getTodos();
+          this.render();
+        } catch (err) { console.error('Failed to update status:', err); }
+      }
+      this.clearDragState();
+      return;
+    }
+
+    // No valid drop target found - check if we should reposition node inside canvas
+    const nodeEl = document.querySelector(`.flow-node[data-todo-id="${todoId}"]`);
+    const canvasContainer = nodeEl?.closest('.flow-canvas-container') as HTMLElement;
+    const rect = canvasContainer?.getBoundingClientRect();
+    const isOutOfCanvas = !rect || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+
+    if (!isOutOfCanvas) {
+      this.clearDragState();
+      return;
+    }
+
+    // Out of canvas and no valid drop target - just clear state
+    this.clearDragState();
+  };
+
+  private flowNodeDragOutOfCanvas(event: MouseEvent, todoId: string) {
+    // Handle drop directly if mouse starts outside canvas
+    const todo = this.state.todos.find(t => t.id === todoId);
+    if (!todo) return;
+    const dropTarget = document.elementFromPoint(event.clientX, event.clientY);
+
+    // Category
+    const categoryItem = dropTarget?.closest('.category-item');
+    if (categoryItem) {
+      const categoryId = categoryItem.getAttribute('data-category-id');
+      if (categoryId && categoryId !== 'daily') {
+        updateTodo(todo.id, todo.name, todo.due_date, todo.due_date_display, todo.status, todo.notes, todo.quick_launch, todo.reminders, categoryId === 'all' ? null : categoryId, todo.priority, todo.is_daily, todo.parent_id);
+        this.state.todos = this.state.todos.map(t => t.id === todoId ? { ...t, category_id: categoryId === 'all' ? null : categoryId } : t);
+        this.render();
+      }
+      return;
+    }
+
+    // Status
+    const statusItem = dropTarget?.closest('.drag-status-item');
+    if (statusItem) {
+      const status = statusItem.getAttribute('data-status');
+      if (status) {
+        updateTodo(todo.id, todo.name, todo.due_date, todo.due_date_display, status, todo.notes, todo.quick_launch, todo.reminders, todo.category_id, todo.priority, todo.is_daily, todo.parent_id);
+        this.state.todos = this.state.todos.map(t => t.id === todoId ? { ...t, status: status as Todo['status'] } : t);
+        this.render();
+      }
+    }
     this.clearDragState();
   }
 

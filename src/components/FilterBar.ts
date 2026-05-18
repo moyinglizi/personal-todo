@@ -1,4 +1,4 @@
-import type { FilterStatus, SortBy } from '../types';
+import type { FilterStatus, SortBy, SortOrder } from '../types';
 import { t } from '../services/i18n';
 
 const STATUS_FILTERS: Array<{ value: FilterStatus; labelKey: string }> = [
@@ -19,8 +19,10 @@ const SORT_OPTIONS: Array<{ value: SortBy; labelKey: string }> = [
 export function renderFilterBar(
   filterStatus: FilterStatus,
   sortBy: SortBy,
+  sortOrder: SortOrder,
   onFilterChange: (status: FilterStatus) => void,
-  onSortChange: (sort: SortBy) => void
+  onSortChange: (sort: SortBy) => void,
+  onToggleSortOrder: () => void
 ): string {
   return `
     <div class="filter-bar">
@@ -43,6 +45,9 @@ export function renderFilterBar(
             </option>
           `).join('')}
         </select>
+        <button class="sort-order-btn" onclick="window.todoApp.toggleSortOrder()" title="${sortOrder === 'asc' ? t('sortAsc') : t('sortDesc')}">
+          ${sortOrder === 'asc' ? '↑' : '↓'}
+        </button>
       </div>
     </div>
   `;

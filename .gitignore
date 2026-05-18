@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 
+backups/*
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -26,6 +27,7 @@ dist-ssr
 # Claude
 .claude/
 CLAUDE.md
+docs/agents/
+docs/prd-flow-drag.md
 
-backups/*
 
